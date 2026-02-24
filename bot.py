@@ -4,8 +4,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from datetime import datetime, timedelta
 import asyncio
 import re
+import aiohttp
 
-TOKEN = "8533732699:AAHZpXRFQvwfU9vL-AzWRVQpwECWnswLn9E"
+TOKEN = "8533732699:AAH9zGR8qmcxQanWOZk3h8uUdm7gaEPIKPc"
 ADMIN_IDS = [6708209142]
 
 logging.basicConfig(
@@ -18,6 +19,7 @@ admin_names = {}
 user_requests = {}
 request_counter = 0
 support_chats = {}
+chat_history = {}
 group_welcome_settings = {}
 group_goodbye_settings = {}
 pending_group_settings = {}
@@ -25,14 +27,17 @@ group_admins_cache = {}
 
 bot_clones = {}
 clone_creation_sessions = {}
-technical_breaks = {}
-tech_break_messages = {}
+technical_breaks = False
+tech_break_message = "🔧 В боте сейчас технические работы. Приходите позже!"
 bot_owners = {}
 accepted_rules = {}
 pending_requests = {}
 blacklisted_users = {}
 request_status = {}
 support_assignments = {}
+pinned_messages = {}
+active_chats = {}
+chat_timers = {}
 
 REQUEST_TOPICS = {
     "problem": "🔧 Проблема",
@@ -59,16 +64,24 @@ def validate_admin_name(name: str) -> bool:
     pattern = r'^[А-ЯЁ][а-яё]+ [А-ЯЁ]\.$'
     return bool(re.match(pattern, name))
 
+async def validate_bot_token(token: str) -> tuple:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://api.telegram.org/bot{token}/getMe") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('ok'):
+                        return True, data['result'].get('username', 'Unknown')
+                return False, None
+    except:
+        return False, None
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
     
     if user.id in blacklisted_users:
         await update.message.reply_text("⛔ Вам заблокирован доступ к поддержке.")
-        return
-    
-    if user.id in technical_breaks and technical_breaks[user.id]:
-        await update.message.reply_text(tech_break_messages.get(user.id, "🔧 В боте сейчас технические работы. Приходите позже!"))
         return
     
     if chat.type in ['group', 'supergroup']:
@@ -88,6 +101,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await show_admin_menu(update, context)
     else:
+        if technical_breaks:
+            await update.message.reply_text(tech_break_message)
+            return
         await show_main_menu(update, context)
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -124,27 +140,31 @@ async def show_contact_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await update.message.reply_text(text, reply_markup=reply_markup)
 
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    status_text = ""
+    if technical_breaks:
+        status_text = "\n\n🔧 ТЕХНИЧЕСКИЙ ПЕРЕРЫВ ВКЛЮЧЕН"
+    
     keyboard = [
         [InlineKeyboardButton("📨 Новые обращения", callback_data="admin_new_requests")],
         [InlineKeyboardButton("📨 Активные чаты", callback_data="admin_active_chats")],
         [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton("🤖 Управление клонами", callback_data="admin_clones")],
+        [InlineKeyboardButton("🤖 Создать копию бота", callback_data="admin_create_clone")],
         [InlineKeyboardButton("🔧 Технический перерыв", callback_data="admin_tech_break")],
         [InlineKeyboardButton("⛔ Черный список", callback_data="admin_blacklist")],
-        [InlineKeyboardButton("⚙️ Настройки", callback_data="admin_settings")]
+        [InlineKeyboardButton("⚙️ Настройки групп", callback_data="admin_settings")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"👨‍💼 Панель администратора\n\nДобро пожаловать, {admin_names.get(update.effective_user.id, 'Администратор')}!",
+        f"👨‍💼 Панель администратора\n\nДобро пожаловать, {admin_names.get(update.effective_user.id, 'Администратор')}!{status_text}",
         reply_markup=reply_markup
     )
 
 async def create_clone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
-    if user.id not in ADMIN_IDS and user.id not in [o for o in bot_owners.values()]:
-        await update.message.reply_text("❌ У вас нет прав для создания клонов")
+    if user.id not in ADMIN_IDS:
+        await update.message.reply_text("❌ У вас нет прав для создания копий бота")
         return
     
     clone_creation_sessions[user.id] = {
@@ -152,10 +172,15 @@ async def create_clone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'expires': datetime.now() + timedelta(minutes=10)
     }
     
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_clone")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        "🤖 Создание клона бота\n\n"
+        "🤖 Создание копии бота\n\n"
         "Отправьте токен нового бота в течение 10 минут:\n"
-        "(можно получить у @BotFather)"
+        "(получите у @BotFather через команду /newbot)\n\n"
+        "Токен выглядит так: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+        reply_markup=reply_markup
     )
     
     asyncio.create_task(check_clone_creation_timeout(user.id, context))
@@ -167,7 +192,7 @@ async def check_clone_creation_timeout(user_id: int, context: ContextTypes.DEFAU
         try:
             await context.bot.send_message(
                 user_id,
-                "⏰ Время на отправку токена истекло. Создание клона отменено."
+                "⏰ Время на отправку токена истекло. Создание копии отменено."
             )
         except:
             pass
@@ -181,16 +206,35 @@ async def handle_clone_token(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     if datetime.now() > clone_creation_sessions[user.id]['expires']:
         del clone_creation_sessions[user.id]
-        await update.message.reply_text("⏰ Время истекло. Начните создание клона заново.")
+        await update.message.reply_text("⏰ Время истекло. Начните создание копии заново.")
         return
     
+    loading_msg = await update.message.reply_text("⏳ Проверяю токен...")
+    
+    is_valid, bot_username = await validate_bot_token(token)
+    
+    if not is_valid:
+        await loading_msg.edit_text(
+            "❌ Токен недействителен. Проверьте правильность и попробуйте снова.\n\n"
+            "Токен можно получить у @BotFather"
+        )
+        return
+    
+    await loading_msg.delete()
+    
     clone_creation_sessions[user.id]['token'] = token
+    clone_creation_sessions[user.id]['bot_username'] = bot_username
     clone_creation_sessions[user.id]['status'] = 'awaiting_admins'
     
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_clone")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        "✅ Токен принят!\n\n"
-        "Теперь отправьте ID администраторов поддержки через запятую\n"
-        "(например: 123456789, 987654321):"
+        f"✅ Токен принят! Бот: @{bot_username}\n\n"
+        f"Теперь отправьте ID администраторов поддержки через запятую\n"
+        f"(например: 123456789, 987654321)\n\n"
+        f"Ваш ID ({user.id}) будет добавлен автоматически",
+        reply_markup=reply_markup
     )
 
 async def handle_clone_admins(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -201,15 +245,23 @@ async def handle_clone_admins(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     
     try:
-        admin_ids = [int(x.strip()) for x in admins_text.split(',')]
+        admin_ids = [int(x.strip()) for x in admins_text.split(',') if x.strip().isdigit()]
+        
+        if user.id not in admin_ids:
+            admin_ids.append(user.id)
+        
+        admin_ids = list(set(admin_ids))
+        
+        clone_data = clone_creation_sessions[user.id]
+        token = clone_data['token']
+        bot_username = clone_data['bot_username']
         
         clone_id = f"clone_{len(bot_clones) + 1}"
         bot_clones[clone_id] = {
-            'token': clone_creation_sessions[user.id]['token'],
+            'token': token,
             'admin_ids': admin_ids,
             'owner_id': user.id,
-            'tech_break': False,
-            'tech_message': "🔧 В боте сейчас технические работы. Приходите позже!",
+            'bot_username': bot_username,
             'created_at': datetime.now().strftime("%d.%m.%Y %H:%M"),
             'status': 'active'
         }
@@ -218,11 +270,38 @@ async def handle_clone_admins(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         del clone_creation_sessions[user.id]
         
+        admins_list = ', '.join(map(str, admin_ids))
+        
+        instruction_text = (
+            f"✅ Копия бота успешно создана!\n\n"
+            f"🤖 Бот: @{bot_username}\n"
+            f"🆔 ID копии: {clone_id}\n"
+            f"👥 Администраторы: {admins_list}\n\n"
+            f"📋 ЧТО ДЕЛАТЬ ДАЛЬШЕ:\n\n"
+            f"1. Зайдите на https://bothost.ru/\n"
+            f"2. Нажмите «Создать бота»\n"
+            f"3. Выберите Python\n"
+            f"4. Вставьте этот токен:\n"
+            f"<code>{token}</code>\n"
+            f"5. В переменные окружения добавьте:\n"
+            f"<code>ADMIN_IDS={','.join(map(str, admin_ids))}</code>\n"
+            f"6. Загрузите код бота и нажмите «Запустить»\n\n"
+            f"🔗 Ссылка: https://bothost.ru/\n\n"
+            f"После запуска бот будет работать как точная копия!"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("🚀 Перейти на bothost.ru", url="https://bothost.ru/")],
+            [InlineKeyboardButton("👤 BotFather", url="https://t.me/botfather")],
+            [InlineKeyboardButton("◀️ В меню", callback_data="admin_back")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await update.message.reply_text(
-            f"✅ Клон бота успешно создан!\n\n"
-            f"ID клона: {clone_id}\n"
-            f"Администраторы: {', '.join(map(str, admin_ids))}\n\n"
-            f"Теперь вы можете управлять клоном через меню администратора"
+            instruction_text,
+            parse_mode='HTML',
+            reply_markup=reply_markup,
+            disable_web_page_preview=True
         )
         
     except Exception as e:
@@ -257,56 +336,110 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
         
+        if context.user_data.get('active_chat'):
+            user_id = context.user_data['active_chat']
+            if user_id in active_chats:
+                message_text = update.message.text
+                timestamp = datetime.now().strftime("%H:%M")
+                
+                if user_id not in chat_history:
+                    chat_history[user_id] = []
+                
+                chat_history[user_id].append({
+                    'from': 'support',
+                    'name': admin_names.get(user.id, 'Оператор'),
+                    'text': message_text,
+                    'time': timestamp
+                })
+                
+                await context.bot.send_message(
+                    user_id,
+                    f"💬 {admin_names.get(user.id, 'Оператор')} ({timestamp}):\n{message_text}"
+                )
+                await update.message.reply_text("✅ Сообщение отправлено")
+            return
+        
         if context.user_data.get('replying_to'):
             request_id = context.user_data['replying_to']
             if request_id in user_requests and request_status.get(request_id) == 'active':
                 user_id = user_requests[request_id]['user_id']
-                support_chats[user_id] = {'request_id': request_id, 'admin_id': user.id}
+                
+                active_chats[user_id] = {
+                    'request_id': request_id,
+                    'admin_id': user.id,
+                    'started': datetime.now().strftime("%d.%m.%Y %H:%M")
+                }
+                
+                context.user_data['active_chat'] = user_id
+                context.user_data['replying_to'] = None
+                
+                if user_id not in chat_history:
+                    chat_history[user_id] = []
+                
+                chat_history[user_id].append({
+                    'from': 'system',
+                    'text': f'Чат начат оператором {admin_names.get(user.id, "Оператор")}',
+                    'time': datetime.now().strftime("%H:%M")
+                })
+                
+                await show_chat_controls(update, context, user_id, request_id)
                 
                 await context.bot.send_message(
                     user_id,
-                    f"💬 Ответ от поддержки ({admin_names.get(user.id, 'Оператор')}):\n\n{update.message.text}"
+                    f"👋 С вами начал диалог оператор {admin_names.get(user.id, 'Оператор')}"
                 )
-                await update.message.reply_text("✅ Ответ отправлен пользователю!")
-                
-                context.user_data['replying_to'] = None
-            else:
-                await update.message.reply_text("❌ Это обращение уже обработано другим оператором")
-                context.user_data['replying_to'] = None
             return
         
         if context.user_data.get('awaiting_tech_message'):
             tech_message = update.message.text
-            technical_breaks[user.id] = True
-            tech_break_messages[user.id] = tech_message
+            global tech_break_message
+            tech_break_message = tech_message
             context.user_data['awaiting_tech_message'] = False
-            await update.message.reply_text(f"✅ Технический перерыв включен. Сообщение: {tech_message}")
+            await update.message.reply_text(f"✅ Сообщение для техперерыва изменено на:\n{tech_message}")
             return
         
         return
     
-    if user.id in technical_breaks and technical_breaks[user.id]:
-        await update.message.reply_text(tech_break_messages.get(user.id, "🔧 В боте сейчас технические работы. Приходите позже!"))
+    if technical_breaks:
+        await update.message.reply_text(tech_break_message)
+        return
+    
+    if user.id in clone_creation_sessions:
+        if clone_creation_sessions[user.id]['status'] == 'awaiting_token':
+            await handle_clone_token(update, context)
+        elif clone_creation_sessions[user.id]['status'] == 'awaiting_admins':
+            await handle_clone_admins(update, context)
         return
     
     if user.id in pending_requests:
         request_data = pending_requests[user.id]
         
         if request_data['stage'] == 'awaiting_custom_topic':
+            if request_data.get('cancel_timer'):
+                request_data['cancel_timer']()
+            
             topic = update.message.text
             if 5 <= len(topic) <= 30:
                 request_data['topic'] = topic
                 request_data['stage'] = 'awaiting_message'
-                await update.message.reply_text("✅ Тема принята! Теперь напишите ваше обращение (от 10 до 500 символов):")
+                
+                keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_request")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    "✅ Тема принята! Теперь напишите ваше обращение (от 10 до 500 символов):\n\n⏰ У вас 5 минут",
+                    reply_markup=reply_markup
+                )
             else:
                 await update.message.reply_text("❌ Тема должна быть от 5 до 30 символов. Попробуйте снова:")
         
         elif request_data['stage'] == 'awaiting_message':
+            if request_data.get('cancel_timer'):
+                request_data['cancel_timer']()
+            
             message_text = update.message.text
             if 10 <= len(message_text) <= 500:
                 request_id = get_new_request_id()
-                request_data['message'] = message_text
-                request_data['request_id'] = request_id
                 
                 user_requests[request_id] = {
                     'user_id': user.id,
@@ -327,6 +460,64 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 del pending_requests[user.id]
             else:
                 await update.message.reply_text("❌ Текст должен быть от 10 до 500 символов. Попробуйте снова:")
+    
+    elif user.id in active_chats:
+        message_text = update.message.text
+        timestamp = datetime.now().strftime("%H:%M")
+        admin_id = active_chats[user.id]['admin_id']
+        
+        if user.id not in chat_history:
+            chat_history[user.id] = []
+        
+        chat_history[user.id].append({
+            'from': 'user',
+            'name': user.first_name,
+            'text': message_text,
+            'time': timestamp
+        })
+        
+        await context.bot.send_message(
+            admin_id,
+            f"💬 {user.first_name} ({timestamp}):\n{message_text}"
+        )
+        await update.message.reply_text("✅ Сообщение отправлено оператору")
+    else:
+        await show_main_menu(update, context)
+
+async def show_chat_controls(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, request_id: str):
+    user = update.effective_user
+    request = user_requests[request_id]
+    
+    history_text = f"📋 Чат с пользователем {request['first_name']}\n"
+    history_text += f"Тема: {request['topic']}\n"
+    history_text += f"Обращение #{request_id}\n\n"
+    
+    if user_id in chat_history and chat_history[user_id]:
+        history_text += "📝 История диалога:\n"
+        for msg in chat_history[user_id]:
+            if msg['from'] == 'user':
+                history_text += f"👤 {msg['name']} ({msg['time']}): {msg['text']}\n"
+            elif msg['from'] == 'support':
+                history_text += f"👨‍💼 {msg['name']} ({msg['time']}): {msg['text']}\n"
+            else:
+                history_text += f"🔄 {msg['text']} ({msg['time']})\n"
+    else:
+        history_text += f"📝 Сообщение пользователя:\n{request['message']}\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("⛔ Заблокировать", callback_data=f"block_user_{user_id}_{request_id}")],
+        [InlineKeyboardButton("✅ Завершить диалог", callback_data=f"end_chat_{user_id}_{request_id}")],
+        [InlineKeyboardButton("🚪 Выйти из диалога", callback_data=f"exit_chat_{user_id}_{request_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    sent_message = await update.message.reply_text(history_text, reply_markup=reply_markup)
+    
+    try:
+        await context.bot.pin_chat_message(chat_id=update.effective_chat.id, message_id=sent_message.message_id)
+        pinned_messages[request_id] = sent_message.message_id
+    except:
+        pass
 
 async def notify_admins_new_request(request_id: str, context: ContextTypes.DEFAULT_TYPE):
     request = user_requests[request_id]
@@ -382,12 +573,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.edit_text(
             "ℹ️ Puls Bot - система поддержки пользователей\n"
-            "Версия: 2.0\n"
+            "Версия: 3.0\n"
             "Разработчик: @username\n\n"
             "Возможности:\n"
             "• Связь с поддержкой\n"
             "• Умные обращения\n"
-            "• Быстрые ответы",
+            "• История диалогов\n"
+            "• Создание копий бота",
             reply_markup=reply_markup
         )
         return
@@ -408,19 +600,61 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text(text, reply_markup=reply_markup)
         return
     
+    if data == "cancel_request":
+        if user.id in pending_requests:
+            if pending_requests[user.id].get('cancel_timer'):
+                pending_requests[user.id]['cancel_timer']()
+            del pending_requests[user.id]
+        await query.message.edit_text("❌ Создание обращения отменено")
+        await show_main_menu_callback(query, context)
+        return
+    
+    if data == "cancel_clone":
+        if user.id in clone_creation_sessions:
+            del clone_creation_sessions[user.id]
+        await query.message.edit_text("❌ Создание копии отменено")
+        await show_admin_menu_callback(query, context)
+        return
+    
     if data.startswith('topic_'):
         topic_key = data.replace('topic_', '')
+        
+        async def cancel_pending(user_id):
+            await asyncio.sleep(300)
+            if user_id in pending_requests:
+                del pending_requests[user_id]
+                try:
+                    await context.bot.send_message(
+                        user_id,
+                        "⏰ Время на написание обращения истекло. Начните заново."
+                    )
+                except:
+                    pass
+        
+        keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_request")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         if topic_key == 'other':
             pending_requests[user.id] = {
                 'stage': 'awaiting_custom_topic'
             }
-            await query.message.edit_text("📝 Введите свою тему обращения (от 5 до 30 символов):")
+            timer_task = asyncio.create_task(cancel_pending(user.id))
+            pending_requests[user.id]['cancel_timer'] = timer_task.cancel
+            await query.message.edit_text(
+                "📝 Введите свою тему обращения (от 5 до 30 символов):\n\n⏰ У вас 5 минут",
+                reply_markup=reply_markup
+            )
         else:
             pending_requests[user.id] = {
                 'stage': 'awaiting_message',
                 'topic': REQUEST_TOPICS[topic_key]
             }
-            await query.message.edit_text("📝 Напишите ваше обращение (от 10 до 500 символов):")
+            timer_task = asyncio.create_task(cancel_pending(user.id))
+            pending_requests[user.id]['cancel_timer'] = timer_task.cancel
+            await query.message.edit_text(
+                "📝 Напишите ваше обращение (от 10 до 500 символов):\n\n⏰ У вас 5 минут",
+                reply_markup=reply_markup
+            )
         return
     
     if data.startswith('accept_'):
@@ -445,11 +679,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await query.message.edit_text(
                 f"✅ Вы приняли обращение #{request_id}\n\n"
-                f"Теперь напишите ответ пользователю:"
+                f"Теперь напишите первое сообщение пользователю:"
             )
             context.user_data['replying_to'] = request_id
         else:
             await query.message.edit_text("❌ Это обращение уже обработано другим оператором")
+        return
     
     if data.startswith('reject_'):
         if user.id not in ADMIN_IDS:
@@ -460,6 +695,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if request_status.get(request_id) == 'new':
             request_status[request_id] = 'rejected'
             await query.message.edit_text(f"❌ Обращение #{request_id} отклонено")
+        return
     
     if data.startswith('blacklist_'):
         if user.id not in ADMIN_IDS:
@@ -482,6 +718,104 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except:
             pass
+        return
+    
+    if data.startswith('block_user_'):
+        if user.id not in ADMIN_IDS:
+            await query.message.reply_text("❌ У вас нет прав для этого действия")
+            return
+        
+        parts = data.replace('block_user_', '').split('_')
+        user_id = int(parts[0])
+        request_id = parts[1]
+        
+        blacklisted_users[user_id] = True
+        
+        if user_id in active_chats:
+            del active_chats[user_id]
+        
+        if request_id in pinned_messages:
+            try:
+                await context.bot.unpin_chat_message(chat_id=user.id, message_id=pinned_messages[request_id])
+            except:
+                pass
+        
+        await query.message.edit_text(f"⛔ Пользователь заблокирован")
+        
+        try:
+            await context.bot.send_message(
+                user_id,
+                "⛔ Вам заблокирован доступ к поддержке."
+            )
+        except:
+            pass
+        return
+    
+    if data.startswith('end_chat_'):
+        if user.id not in ADMIN_IDS:
+            await query.message.reply_text("❌ У вас нет прав для этого действия")
+            return
+        
+        parts = data.replace('end_chat_', '').split('_')
+        user_id = int(parts[0])
+        request_id = parts[1]
+        
+        if user_id in active_chats:
+            del active_chats[user_id]
+        
+        if request_id in pinned_messages:
+            try:
+                await context.bot.unpin_chat_message(chat_id=user.id, message_id=pinned_messages[request_id])
+            except:
+                pass
+        
+        request_status[request_id] = 'ended'
+        
+        if user_id in context.user_data and context.user_data.get('active_chat') == user_id:
+            context.user_data['active_chat'] = None
+        
+        await query.message.edit_text(f"✅ Диалог завершен")
+        
+        try:
+            await context.bot.send_message(
+                user_id,
+                "✅ Диалог с поддержкой завершен. Спасибо за обращение!"
+            )
+        except:
+            pass
+        return
+    
+    if data.startswith('exit_chat_'):
+        if user.id not in ADMIN_IDS:
+            await query.message.reply_text("❌ У вас нет прав для этого действия")
+            return
+        
+        parts = data.replace('exit_chat_', '').split('_')
+        user_id = int(parts[0])
+        request_id = parts[1]
+        
+        if user_id in active_chats:
+            del active_chats[user_id]
+        
+        if request_id in pinned_messages:
+            try:
+                await context.bot.unpin_chat_message(chat_id=user.id, message_id=pinned_messages[request_id])
+            except:
+                pass
+        
+        if user_id in context.user_data and context.user_data.get('active_chat') == user_id:
+            context.user_data['active_chat'] = None
+        
+        await query.message.edit_text(f"🚪 Вы вышли из диалога")
+        
+        try:
+            await context.bot.send_message(
+                user_id,
+                "🚪 Оператор вышел из диалога. Ожидайте, скоро к вам подключатся."
+            )
+        except:
+            pass
+        return
     
     if data == "admin_new_requests":
         if user.id not in ADMIN_IDS:
@@ -500,29 +834,29 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "📨 Нет новых обращений"
         
         await query.message.edit_text(text, reply_markup=reply_markup)
+        return
     
     if data == "admin_active_chats":
         if user.id not in ADMIN_IDS:
             await query.message.reply_text("❌ У вас нет прав для этого действия")
             return
         
-        active = []
-        for user_id, chat_info in support_chats.items():
-            try:
-                user_chat = await context.bot.get_chat(user_id)
-                active.append(f"👤 {user_chat.first_name}: #{chat_info['request_id']}")
-            except:
-                continue
-        
         keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="admin_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        if active:
-            text = "📨 Активные чаты:\n\n" + "\n".join(active)
+        if active_chats:
+            text = "📨 Активные чаты:\n\n"
+            for user_id, chat_info in active_chats.items():
+                try:
+                    user_chat = await context.bot.get_chat(user_id)
+                    text += f"👤 {user_chat.first_name}: #{chat_info['request_id']}\n"
+                except:
+                    continue
         else:
             text = "📨 Нет активных чатов"
         
         await query.message.edit_text(text, reply_markup=reply_markup)
+        return
     
     if data == "admin_stats":
         if user.id not in ADMIN_IDS:
@@ -545,6 +879,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="admin_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.edit_text(stats, reply_markup=reply_markup)
+        return
     
     if data == "admin_blacklist":
         if user.id not in ADMIN_IDS:
@@ -561,48 +896,23 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="admin_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.edit_text(text, reply_markup=reply_markup)
+        return
     
-    if data == "admin_clones":
-        if user.id not in ADMIN_IDS and user.id not in [o for o in bot_owners.values()]:
-            await query.message.reply_text("❌ У вас нет прав для этого действия")
-            return
-        
-        keyboard = [
-            [InlineKeyboardButton("➕ Создать клона", callback_data="create_clone")],
-            [InlineKeyboardButton("📋 Список клонов", callback_data="list_clones")],
-            [InlineKeyboardButton("◀️ Назад", callback_data="admin_back")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.edit_text("🤖 Управление клонами бота:", reply_markup=reply_markup)
-    
-    if data == "create_clone":
-        if user.id not in ADMIN_IDS and user.id not in [o for o in bot_owners.values()]:
+    if data == "admin_create_clone":
+        if user.id not in ADMIN_IDS:
             await query.message.reply_text("❌ У вас нет прав для этого действия")
             return
         
         await create_clone_callback(query, context)
-    
-    if data == "list_clones":
-        if user.id not in ADMIN_IDS and user.id not in [o for o in bot_owners.values()]:
-            await query.message.reply_text("❌ У вас нет прав для этого действия")
-            return
-        
-        if bot_clones:
-            text = "📋 Список клонов:\n\n"
-            for clone_id, clone_info in bot_clones.items():
-                status = "🟢 Активен" if clone_info['status'] == 'active' else "🔴 Неактивен"
-                text += f"ID: {clone_id}\n{status}\nВладелец: {clone_info['owner_id']}\nСоздан: {clone_info['created_at']}\n\n"
-        else:
-            text = "📋 Нет созданных клонов"
-        
-        keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="admin_clones")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.edit_text(text, reply_markup=reply_markup)
+        return
     
     if data == "admin_tech_break":
         if user.id not in ADMIN_IDS:
             await query.message.reply_text("❌ У вас нет прав для этого действия")
             return
+        
+        global technical_breaks
+        status = "🔧 ВКЛЮЧЕН" if technical_breaks else "✅ ВЫКЛЮЧЕН"
         
         keyboard = [
             [InlineKeyboardButton("🔧 Включить техперерыв", callback_data="tech_break_on")],
@@ -611,27 +921,33 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("◀️ Назад", callback_data="admin_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.edit_text("🔧 Управление техническим перерывом:", reply_markup=reply_markup)
+        await query.message.edit_text(
+            f"🔧 Управление техническим перерывом\n\n"
+            f"Текущий статус: {status}\n"
+            f"Текущее сообщение: {tech_break_message}",
+            reply_markup=reply_markup
+        )
+        return
     
     if data == "tech_break_on":
         if user.id not in ADMIN_IDS:
             await query.message.reply_text("❌ У вас нет прав для этого действия")
             return
         
-        technical_breaks[user.id] = True
-        if user.id not in tech_break_messages:
-            tech_break_messages[user.id] = "🔧 В боте сейчас технические работы. Приходите позже!"
-        
-        await query.message.edit_text("✅ Технический перерыв включен")
+        global technical_breaks
+        technical_breaks = True
+        await query.message.edit_text("✅ Технический перерыв включен. Пользователи теперь видят сообщение о техперерыве.")
+        return
     
     if data == "tech_break_off":
         if user.id not in ADMIN_IDS:
             await query.message.reply_text("❌ У вас нет прав для этого действия")
             return
         
-        if user.id in technical_breaks:
-            del technical_breaks[user.id]
-        await query.message.edit_text("✅ Технический перерыв выключен")
+        global technical_breaks
+        technical_breaks = False
+        await query.message.edit_text("✅ Технический перерыв выключен. Пользователи могут обращаться в поддержку.")
+        return
     
     if data == "tech_break_message":
         if user.id not in ADMIN_IDS:
@@ -640,9 +956,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         context.user_data['awaiting_tech_message'] = True
         await query.message.edit_text(
-            "✏️ Отправьте новое сообщение для технического перерыва:\n\n"
-            "(оно будет показываться пользователям при /start)"
+            f"✏️ Отправьте новое сообщение для технического перерыва:\n\n"
+            f"Текущее сообщение:\n{tech_break_message}"
         )
+        return
     
     if data == "admin_settings":
         if user.id not in ADMIN_IDS:
@@ -651,12 +968,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard = [
             [InlineKeyboardButton("👥 Мои группы", callback_data="admin_my_groups")],
-            [InlineKeyboardButton("🤖 Клоны", callback_data="admin_clones")],
             [InlineKeyboardButton("🔧 Техперерыв", callback_data="admin_tech_break")],
             [InlineKeyboardButton("◀️ Назад", callback_data="admin_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.edit_text("⚙️ Настройки бота:", reply_markup=reply_markup)
+        return
     
     if data == "admin_my_groups":
         if user.id not in ADMIN_IDS:
@@ -681,9 +998,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "У вас нет групп с настроенными приветствиями"
         
         await query.message.edit_text(text, reply_markup=reply_markup)
+        return
     
     if data == "admin_back":
         await show_admin_menu_callback(query, context)
+        return
     
     if data.startswith('confirm_welcome_'):
         chat_id = int(data.replace('confirm_welcome_', ''))
@@ -695,6 +1014,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("✅ Приветствие успешно сохранено!")
             else:
                 await query.message.reply_text("❌ Только владелец может подтвердить изменения")
+        return
     
     if data.startswith('cancel_welcome_'):
         chat_id = int(data.replace('cancel_welcome_', ''))
@@ -704,6 +1024,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("❌ Изменения отменены")
             else:
                 await query.message.reply_text("❌ Только владелец может отменить изменения")
+        return
     
     if data.startswith('confirm_goodbye_'):
         chat_id = int(data.replace('confirm_goodbye_', ''))
@@ -715,6 +1036,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("✅ Сообщение о выходе успешно сохранено!")
             else:
                 await query.message.reply_text("❌ Только владелец может подтвердить изменения")
+        return
     
     if data.startswith('cancel_goodbye_'):
         chat_id = int(data.replace('cancel_goodbye_', ''))
@@ -724,6 +1046,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("❌ Изменения отменены")
             else:
                 await query.message.reply_text("❌ Только владелец может отменить изменения")
+        return
 
 async def create_clone_callback(query, context):
     user = query.from_user
@@ -733,28 +1056,50 @@ async def create_clone_callback(query, context):
         'expires': datetime.now() + timedelta(minutes=10)
     }
     
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_clone")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await query.message.edit_text(
-        "🤖 Создание клона бота\n\n"
+        "🤖 Создание копии бота\n\n"
         "Отправьте токен нового бота в течение 10 минут:\n"
-        "(можно получить у @BotFather)"
+        "(получите у @BotFather через команду /newbot)\n\n"
+        "Токен выглядит так: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+        reply_markup=reply_markup
     )
     
     asyncio.create_task(check_clone_creation_timeout(user.id, context))
 
 async def show_admin_menu_callback(query, context):
+    status_text = ""
+    if technical_breaks:
+        status_text = "\n\n🔧 ТЕХНИЧЕСКИЙ ПЕРЕРЫВ ВКЛЮЧЕН"
+    
     keyboard = [
         [InlineKeyboardButton("📨 Новые обращения", callback_data="admin_new_requests")],
         [InlineKeyboardButton("📨 Активные чаты", callback_data="admin_active_chats")],
         [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton("🤖 Управление клонами", callback_data="admin_clones")],
+        [InlineKeyboardButton("🤖 Создать копию бота", callback_data="admin_create_clone")],
         [InlineKeyboardButton("🔧 Технический перерыв", callback_data="admin_tech_break")],
         [InlineKeyboardButton("⛔ Черный список", callback_data="admin_blacklist")],
-        [InlineKeyboardButton("⚙️ Настройки", callback_data="admin_settings")]
+        [InlineKeyboardButton("⚙️ Настройки групп", callback_data="admin_settings")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.message.edit_text(
-        f"👨‍💼 Панель администратора\n\nДобро пожаловать, {admin_names.get(query.from_user.id, 'Администратор')}!",
+        f"👨‍💼 Панель администратора\n\nДобро пожаловать, {admin_names.get(query.from_user.id, 'Администратор')}!{status_text}",
+        reply_markup=reply_markup
+    )
+
+async def show_main_menu_callback(query, context):
+    keyboard = [
+        [InlineKeyboardButton("📞 Связаться с поддержкой", callback_data="contact_support")],
+        [InlineKeyboardButton("ℹ️ О боте", callback_data="about_bot")],
+        [InlineKeyboardButton("📊 Мои обращения", callback_data="my_requests")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.message.edit_text(
+        f"👋 Привет, {query.from_user.first_name}!\n\nВыберите действие:",
         reply_markup=reply_markup
     )
 
@@ -918,25 +1263,6 @@ async def chat_member_update(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"👋 {user.first_name} покинул группу... Жалко терять таких участников 😢"
             )
 
-async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    
-    if user.id in clone_creation_sessions:
-        if clone_creation_sessions[user.id]['status'] == 'awaiting_token':
-            if datetime.now() > clone_creation_sessions[user.id]['expires']:
-                del clone_creation_sessions[user.id]
-                await update.message.reply_text("⏰ Время истекло. Начните создание клона заново с /start")
-                return
-            
-            if update.message.text and not update.message.text.startswith('/'):
-                await handle_clone_token(update, context)
-                return
-        
-        elif clone_creation_sessions[user.id]['status'] == 'awaiting_admins':
-            if update.message.text and not update.message.text.startswith('/'):
-                await handle_clone_admins(update, context)
-                return
-
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     
@@ -951,24 +1277,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "👋 Команды:\n"
             "/start - начать работу\n"
-            "/help - это сообщение\n"
-            "/clone - создать клона бота (для владельцев)"
+            "/help - это сообщение"
         )
 
 async def clone_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
-    if user.id not in ADMIN_IDS and user.id not in [o for o in bot_owners.values()]:
-        await update.message.reply_text("❌ У вас нет прав для создания клонов")
+    if user.id not in ADMIN_IDS:
+        await update.message.reply_text("❌ У вас нет прав для создания копий бота")
         return
     
     await create_clone(update, context)
 
 def main():
-    if TOKEN == "YOUR_BOT_TOKEN_HERE":
-        print("⚠️ Пожалуйста, вставьте ваш токен бота в переменную TOKEN")
-        return
-    
     application = Application.builder().token(TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
@@ -982,7 +1303,6 @@ def main():
     
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.CAPTION, handle_group_media))
-    application.add_handler(MessageHandler(filters.ALL, handle_command))
     
     print("🤖 Бот Puls запущен...")
     application.run_polling()
