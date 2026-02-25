@@ -20,7 +20,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.client.default import DefaultBotProperties
 
 # ========== КОНФИГУРАЦИЯ ==========
-BOT_TOKEN = '7966298894:'8557190026:AAGSBViDE6P8TZx15HAi5IF-G9MBRjnsmaY'
+BOT_TOKEN = '8557190026:AAGSBViDE6P8TZx15HAi5IF-G9MBRjnsmaY'
 DB_FILE = 'puls_bot.db'
 
 # ========== СИСТЕМА УРОВНЕЙ ==========
