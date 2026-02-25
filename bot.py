@@ -805,14 +805,24 @@ async def use_generated_password(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @router.message(AuthStates.new_password)
-async def process_new_password(message: Message, state: FSMContext, password: str = None):
+async def process_new_password(message: Message, state: FSMContext):
     """Создание аккаунта с паролем"""
     if message.chat.type != "private":
         return
     
-    if password is None:
-        password = message.text.strip()
-        await message.delete()
+    password = message.text.strip()
+    await message.delete()
+    
+    data = await state.get_data()
+    username = data.get('new_username')
+    
+    if not username:
+        await message.answer(
+            "❌ Ошибка: не найден логин. Начни регистрацию заново.",
+            reply_markup=login_keyboard()
+        )
+        await state.clear()
+        return
     
     if len(password) < 6 or len(password) > 20:
         await message.answer(
@@ -821,9 +831,6 @@ async def process_new_password(message: Message, state: FSMContext, password: st
             reply_markup=generate_password_keyboard()
         )
         return
-    
-    data = await state.get_data()
-    username = data['new_username']
     
     with get_db() as conn:
         cursor = conn.cursor()
@@ -853,7 +860,8 @@ async def process_new_password(message: Message, state: FSMContext, password: st
         if total_acc >= 3:
             await message.answer(
                 "❌ Достигнут лимит аккаунтов (максимум 3).\n"
-                "Удали старый аккаунт или используй существующий."
+                "Удали старый аккаунт или используй существующий.",
+                reply_markup=login_keyboard()
             )
             await state.clear()
             return
@@ -866,6 +874,7 @@ async def process_new_password(message: Message, state: FSMContext, password: st
         
         account_id = cursor.lastrowid
         
+        # Инициализируем попытки для игр
         games = ["Угадай число", "Камень-Ножницы-Бумага", "Крестики-Нолики", "Слот-машина"]
         for game in games:
             cursor.execute('''
@@ -873,14 +882,17 @@ async def process_new_password(message: Message, state: FSMContext, password: st
             VALUES (?, ?, 0, ?, 5, 0)
             ''', (account_id, game, datetime.date.today().isoformat()))
         
-        conn.commit()
-        
+        # Проверяем, админ ли пользователь
         cursor.execute("SELECT admin FROM users WHERE tg_id = ?", (message.from_user.id,))
         user = cursor.fetchone()
         is_admin = user['admin'] == 1 if user else False
+        
+        conn.commit()
     
+    # ✅ **ВАЖНО: Сохраняем ID аккаунта в состоянии**
     await state.update_data(current_account=account_id)
     
+    # Отправляем приветствие с главным меню
     await message.answer_photo(
         photo="https://kappa.lol/v3Fqcl",
         caption=f"🎉 Аккаунт создан!\n\n"
