@@ -965,7 +965,7 @@ async def cmd_add_stopword(message: Message, state: FSMContext):
     await state.update_data(
         word=word,
         msg_owner=f"word_{message.from_user.id}",
-        f"msg_owner_{message.message_id}": message.from_user.id
+        **{f"msg_owner_{message.message_id}": message.from_user.id}
     )
     
     builder = InlineKeyboardBuilder()
