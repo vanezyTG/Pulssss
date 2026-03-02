@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-BOT_TOKEN = "8557190026:AAE1gxBApenpt8uKzhcuMz56lQAWAeMCqIk"  # Замените на ваш токен
+BOT_TOKEN = "8557190026:AAHfPJ4s2jL2WYHvGs3F74U-LALDzAHH1K0"  # Замените на ваш токен
 ADMIN_IDS = [6708209142]  # Замените на ID администраторов бота
 MAX_MUTE_DAYS = 36500  # 100 лет в днях
 MAX_BAN_DAYS = 36500   # 100 лет в днях
