@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # Замените на ваш токен
+BOT_TOKEN = "8557190026:AAHJVKD6gN-nZ6p5fudad8-UVZqnSyMEXNE"  # Замените на ваш токен
 MAX_MUTE_DAYS = 36500  # 100 лет в днях
 MAX_BAN_DAYS = 36500   # 100 лет в днях
 
