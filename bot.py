@@ -3,14 +3,14 @@ import logging
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, List, Dict
 import sqlite3
 from contextlib import contextmanager
 from functools import wraps
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, CallbackQuery, ChatPermissions, InlineKeyboardMarkup
+from aiogram.types import Message, CallbackQuery, ChatPermissions
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Конфигурация
 BOT_TOKEN = "8557190026:AAE1gxBApenpt8uKzhcuMz56lQAWAeMCqIk"  # Замените на ваш токен
+ADMIN_IDS = [6708209142]  # Замените на ID администраторов бота
 MAX_MUTE_DAYS = 36500  # 100 лет в днях
 MAX_BAN_DAYS = 36500   # 100 лет в днях
 
@@ -33,6 +34,109 @@ MAX_BAN_DAYS = 36500   # 100 лет в днях
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+
+# Словарь для замены похожих букв (кириллица + латиница)
+SIMILAR_CHARS = {
+    'а': ['a', 'а', '@'],  # a латинская, а русская, @
+    'б': ['6', 'b', 'б'],
+    'в': ['b', 'в', '8'],
+    'г': ['r', 'г'],
+    'д': ['d', 'д'],
+    'е': ['e', 'е', '3'],
+    'ё': ['e', 'е', 'ё'],
+    'ж': ['zh', 'ж'],
+    'з': ['3', 'z', 'з'],
+    'и': ['u', 'и'],
+    'й': ['u', 'й', 'u'],
+    'к': ['k', 'к'],
+    'л': ['l', 'л'],
+    'м': ['m', 'м'],
+    'н': ['h', 'н'],
+    'о': ['o', '0', 'о', '()'],
+    'п': ['n', 'п'],
+    'р': ['p', 'р'],
+    'с': ['c', 'с', '$'],
+    'т': ['t', 'т'],
+    'у': ['y', 'у'],
+    'ф': ['f', 'ф'],
+    'х': ['x', 'х', '%'],
+    'ц': ['c', 'ц'],
+    'ч': ['ch', '4'],
+    'ш': ['sh', 'ш'],
+    'щ': ['sch', 'щ'],
+    'ъ': ['b', 'ъ'],
+    'ы': ['b', 'ы'],
+    'ь': ['b', 'ь'],
+    'э': ['e', 'э'],
+    'ю': ['yu', 'ю'],
+    'я': ['ya', 'я'],
+    ' ': [' ', '_', '-', '.', ',', '!', '?', '@', '#', '$', '%', '^', '&', '*', '(', ')', '+', '=']
+}
+
+# Создаем обратный словарь для быстрого поиска
+CHAR_VARIANTS = {}
+for char, variants in SIMILAR_CHARS.items():
+    for variant in variants:
+        CHAR_VARIANTS[variant] = char
+
+def normalize_text(text: str) -> str:
+    """
+    Нормализует текст, заменяя похожие буквы и символы
+    Пример: "пpивет" -> "привет" (p заменяется на р)
+    """
+    if not text:
+        return ""
+    
+    text = text.lower()
+    result = []
+    
+    for char in text:
+        if char in CHAR_VARIANTS:
+            result.append(CHAR_VARIANTS[char])
+        else:
+            # Если символ не найден в словаре, оставляем как есть
+            # Но убираем специальные символы, которые могут быть использованы для обхода
+            if char.isalnum() or char in [' ', '_', '-']:
+                result.append(char)
+    
+    return ''.join(result)
+
+def text_contains_word(text: str, word: str) -> bool:
+    """
+    Проверяет, содержит ли текст заданное слово с учетом:
+    - Регистра букв
+    - Похожих букв (латиница/кириллица)
+    - Специальных символов между буквами
+    - Любого положения в тексте
+    """
+    if not text or not word:
+        return False
+    
+    # Нормализуем оба текста
+    normalized_text = normalize_text(text.lower())
+    normalized_word = normalize_text(word.lower())
+    
+    if not normalized_word:
+        return False
+    
+    # Простая проверка вхождения
+    if normalized_word in normalized_text:
+        return True
+    
+    # Проверка с учетом возможных разделителей между буквами
+    # Например: "п р и в е т" или "п.р.и.в.е.т"
+    text_without_spaces = re.sub(r'[^а-яa-z0-9]', '', normalized_text)
+    word_without_spaces = re.sub(r'[^а-яa-z0-9]', '', normalized_word)
+    
+    if word_without_spaces and word_without_spaces in text_without_spaces:
+        return True
+    
+    # Проверка на границы слов (чтобы "мат" не находилось в "математика")
+    pattern = r'\b' + re.escape(normalized_word) + r'\b'
+    if re.search(pattern, normalized_text):
+        return True
+    
+    return False
 
 # Классы состояний для FSM
 class RulesStates(StatesGroup):
@@ -50,15 +154,18 @@ def check_owner():
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
-            # Получаем данные о пользователе, который нажал кнопку
             user_id = callback.from_user.id
+            state: FSMContext = kwargs.get('state')
             
-            # Проверяем, есть ли сохраненный владелец для этого сообщения
-            # В aiogram нет прямого доступа к владельцу сообщения, поэтому будем хранить в FSM
-            state = kwargs.get('state')
             if state:
                 data = await state.get_data()
-                message_owner = data.get(f"msg_owner_{callback.message.message_id}")
+                message_owner = None
+                
+                for key in data:
+                    if key.startswith('msg_owner_'):
+                        if str(callback.message.message_id) in key:
+                            message_owner = data[key]
+                            break
                 
                 if message_owner and message_owner != user_id:
                     await callback.answer("⚠️ Эта кнопка не для вас!", show_alert=True)
@@ -91,6 +198,18 @@ def check_creator():
         return wrapper
     return decorator
 
+# Декоратор для проверки прав администратора бота
+def check_bot_admin():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(message: Message, *args, **kwargs):
+            if message.from_user.id not in ADMIN_IDS:
+                await message.answer("❌ Эта команда доступна только администраторам бота!")
+                return
+            return await func(message, *args, **kwargs)
+        return wrapper
+    return decorator
+
 # Работа с базой данных
 class Database:
     def __init__(self, db_path="puls_manager.db"):
@@ -116,7 +235,9 @@ class Database:
                           rules_enabled INTEGER DEFAULT 0,
                           rules_interval INTEGER DEFAULT 300,
                           last_rules_message_id INTEGER,
-                          last_rules_time INTEGER)''')
+                          last_rules_time INTEGER,
+                          chat_title TEXT,
+                          chat_username TEXT)''')
             
             # Таблица для запрещенных слов
             c.execute('''CREATE TABLE IF NOT EXISTS banned_words
@@ -133,14 +254,26 @@ class Database:
                          (chat_id INTEGER PRIMARY KEY,
                           creator_id INTEGER)''')
             
+            # Таблица для статистики нарушений
+            c.execute('''CREATE TABLE IF NOT EXISTS violations
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          chat_id INTEGER,
+                          user_id INTEGER,
+                          user_name TEXT,
+                          word TEXT,
+                          punishment TEXT,
+                          timestamp INTEGER)''')
+            
             conn.commit()
     
     # Методы для правил
-    def save_rules(self, chat_id: int, rules_text: str):
+    def save_rules(self, chat_id: int, rules_text: str, chat_title: str = None, chat_username: str = None):
         with self.get_connection() as conn:
             c = conn.cursor()
-            c.execute('''INSERT OR REPLACE INTO group_rules (chat_id, rules_text) 
-                         VALUES (?, ?)''', (chat_id, rules_text))
+            c.execute('''INSERT OR REPLACE INTO group_rules 
+                         (chat_id, rules_text, chat_title, chat_username) 
+                         VALUES (?, ?, ?, ?)''', 
+                         (chat_id, rules_text, chat_title, chat_username))
             conn.commit()
     
     def get_rules(self, chat_id: int) -> Optional[str]:
@@ -153,7 +286,6 @@ class Database:
     def set_rules_settings(self, chat_id: int, enabled: bool, interval: int):
         with self.get_connection() as conn:
             c = conn.cursor()
-            # Сначала проверяем существование записи
             c.execute('SELECT rules_text FROM group_rules WHERE chat_id = ?', (chat_id,))
             existing = c.fetchone()
             
@@ -213,17 +345,17 @@ class Database:
             return c.fetchall()
     
     def check_banned_word(self, chat_id: int, text: str):
+        """Проверяет текст на наличие запрещенных слов с учетом похожих букв"""
         if not text:
             return None
-        text_lower = text.lower()
+        
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute('''SELECT word, punishment_type, punishment_time, punishment_unit 
                          FROM banned_words WHERE chat_id = ?''', (chat_id,))
+            
             for word, p_type, p_time, p_unit in c.fetchall():
-                # Проверяем вхождение слова как целое слово или часть текста
-                pattern = r'\b' + re.escape(word) + r'\b'
-                if re.search(pattern, text_lower):
+                if text_contains_word(text, word):
                     return (word, p_type, p_time, p_unit)
             return None
     
@@ -241,6 +373,61 @@ class Database:
             c.execute('SELECT creator_id FROM group_creators WHERE chat_id = ?', (chat_id,))
             result = c.fetchone()
             return result[0] if result else None
+    
+    # Методы для статистики нарушений
+    def add_violation(self, chat_id: int, user_id: int, user_name: str, word: str, punishment: str):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('''INSERT INTO violations 
+                         (chat_id, user_id, user_name, word, punishment, timestamp) 
+                         VALUES (?, ?, ?, ?, ?, ?)''',
+                         (chat_id, user_id, user_name, word, punishment, int(time.time())))
+            conn.commit()
+    
+    # Методы для статистики админа
+    def get_all_chats(self):
+        """Получает список всех чатов, где есть бот"""
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('''SELECT chat_id, chat_title, chat_username, rules_enabled,
+                                (SELECT COUNT(*) FROM banned_words WHERE chat_id = group_rules.chat_id) as words_count
+                         FROM group_rules 
+                         ORDER BY chat_id''')
+            return c.fetchall()
+    
+    def get_total_stats(self):
+        """Получает общую статистику"""
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            
+            # Всего групп
+            c.execute('SELECT COUNT(DISTINCT chat_id) FROM group_rules')
+            total_groups = c.fetchone()[0] or 0
+            
+            # Всего запрещенных слов
+            c.execute('SELECT COUNT(*) FROM banned_words')
+            total_words = c.fetchone()[0] or 0
+            
+            # Всего нарушений
+            c.execute('SELECT COUNT(*) FROM violations')
+            total_violations = c.fetchone()[0] or 0
+            
+            # Уникальных нарушителей
+            c.execute('SELECT COUNT(DISTINCT user_id) FROM violations')
+            unique_users = c.fetchone()[0] or 0
+            
+            # Последние 10 нарушений
+            c.execute('''SELECT chat_id, user_name, word, punishment, timestamp 
+                         FROM violations ORDER BY timestamp DESC LIMIT 10''')
+            recent = c.fetchall()
+            
+            return {
+                'total_groups': total_groups,
+                'total_words': total_words,
+                'total_violations': total_violations,
+                'unique_users': unique_users,
+                'recent': recent
+            }
 
 # Создаем экземпляр базы данных
 db = Database()
@@ -280,9 +467,9 @@ def get_main_keyboard():
     """Создает главное меню"""
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 О боте", callback_data="about")
+    builder.button(text="🆘 Помощь", callback_data="help")
     builder.button(text="📜 Правила", callback_data="rules")
     builder.button(text="⚙️ Управление группой", callback_data="group_manage")
-    builder.button(text="📊 Статистика", callback_data="stats")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -306,11 +493,120 @@ def get_rules_auto_keyboard(enabled: bool):
     builder.adjust(1)
     return builder.as_markup()
 
+def extract_message_text(message: Message) -> str:
+    """
+    Извлекает полный текст сообщения, включая:
+    - Обычный текст
+    - Текст под спойлером
+    - Текст в caption
+    - Цитируемый текст
+    """
+    text_parts = []
+    
+    if message.text:
+        text_parts.append(message.text)
+    
+    if message.caption:
+        text_parts.append(message.caption)
+    
+    if message.reply_to_message:
+        reply = message.reply_to_message
+        if reply.text:
+            text_parts.append(reply.text)
+        if reply.caption:
+            text_parts.append(reply.caption)
+    
+    entities = []
+    if message.entities:
+        entities.extend(message.entities)
+    if message.caption_entities:
+        entities.extend(message.caption_entities)
+    
+    for entity in entities:
+        if entity.type == 'spoiler':
+            if message.text:
+                spoiler_text = message.text[entity.offset:entity.offset + entity.length]
+                text_parts.append(spoiler_text)
+            elif message.caption:
+                spoiler_text = message.caption[entity.offset:entity.offset + entity.length]
+                text_parts.append(spoiler_text)
+    
+    return " ".join(text_parts) if text_parts else ""
+
+# Команды для администраторов бота
+@dp.message(Command("adminstats"))
+@check_bot_admin()
+async def cmd_admin_stats(message: Message):
+    """Статистика для администратора бота"""
+    stats = db.get_total_stats()
+    chats = db.get_all_chats()
+    
+    text = (
+        "📊 <b>Статистика бота</b>\n\n"
+        f"📱 Всего групп: {stats['total_groups']}\n"
+        f"🚫 Запрещенных слов: {stats['total_words']}\n"
+        f"👮‍♂️ Всего нарушений: {stats['total_violations']}\n"
+        f"👥 Уникальных нарушителей: {stats['unique_users']}\n\n"
+    )
+    
+    if chats:
+        text += "<b>📋 Список групп:</b>\n"
+        for chat_id, title, username, enabled, words_count in chats:
+            if username:
+                link = f"https://t.me/{username}"
+                chat_info = f"<a href='{link}'>{title or 'Без названия'}</a>"
+            else:
+                chat_info = f"{title or 'Без названия'} (частная)"
+            
+            status = "✅" if enabled else "❌"
+            text += f"{status} {chat_info} | Слов: {words_count}\n"
+    
+    if stats['recent']:
+        text += "\n<b>🕐 Последние нарушения:</b>\n"
+        for chat_id, user_name, word, punishment, timestamp in stats['recent'][:5]:
+            date = datetime.fromtimestamp(timestamp).strftime('%d.%m %H:%M')
+            text += f"• {date} - {user_name}: {word} ({punishment})\n"
+    
+    await message.answer(text)
+
+@dp.message(Command("adminchats"))
+@check_bot_admin()
+async def cmd_admin_chats(message: Message):
+    """Показывает все чаты, где есть бот"""
+    chats = db.get_all_chats()
+    
+    if not chats:
+        await message.answer("❌ Бот еще не добавлен ни в одну группу.")
+        return
+    
+    text = "📱 <b>Список групп с ботом:</b>\n\n"
+    
+    for chat_id, title, username, enabled, words_count in chats:
+        if username:
+            link = f"https://t.me/{username}"
+            chat_info = f"• <a href='{link}'>{title or 'Без названия'}</a>"
+        else:
+            # Для частных групп создаем пригласительную ссылку
+            try:
+                invite_link = await bot.create_chat_invite_link(chat_id, member_limit=1)
+                chat_info = f"• <a href='{invite_link.invite_link}'>{title or 'Приватная группа'}</a>"
+            except:
+                chat_info = f"• {title or 'Приватная группа'} (нет доступа)"
+        
+        status = "✅" if enabled else "❌"
+        text += f"{status} {chat_info} | ID: <code>{chat_id}</code> | Слов: {words_count}\n"
+    
+    # Разбиваем на части, если сообщение слишком длинное
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await message.answer(text[i:i+4000])
+    else:
+        await message.answer(text)
+
 # Обработчики команд
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     """Обработчик команды /start"""
-    # Сохраняем владельца сообщения
     await state.update_data({f"msg_owner_{message.message_id}": message.from_user.id})
     
     text = (
@@ -320,8 +616,8 @@ async def cmd_start(message: Message, state: FSMContext):
         "🔹 <b>Мои возможности:</b>\n"
         "• Установка и автоматическая рассылка правил\n"
         "• Блокировка запрещенных слов\n"
-        "• Автоматические наказания (мут/бан/кик)\n"
-        "• Гибкая система настроек\n\n"
+        "• Распознаю слова даже с подменой букв (p -> р, 0 -> о и т.д.)\n"
+        "• Автоматические наказания (мут/бан/кик)\n\n"
         "Выберите интересующий раздел в меню ниже 👇"
     )
     await message.answer(text, reply_markup=get_main_keyboard())
@@ -342,26 +638,59 @@ async def cmd_rules(message: Message):
     
     rules = db.get_rules(message.chat.id)
     if rules:
-        # Отправляем с цитированием исходного сообщения
         await message.reply(f"<b>📜 Правила чата:</b>\n\n{rules}")
     else:
         await message.answer("❓ В этом чате еще не установлены правила.")
 
-# Обработчики колбэков с защитой
+# Обработчики колбэков
 @dp.callback_query(F.data == "about")
 @check_owner()
 async def callback_about(callback: CallbackQuery, state: FSMContext):
     """Информация о боте"""
     text = (
         "🤖 <b>Puls Chat Manager</b>\n\n"
-        "Версия: 2.0 (aiogram)\n\n"
         "📌 <b>Что я умею:</b>\n"
         "• Автоматическая модерация\n"
         "• Борьба со спамом и запрещенными словами\n"
+        "• Распознаю слова с подменой букв (p -> р, 0 -> о)\n"
+        "• Проверяю спойлеры и цитаты\n"
         "• Гибкие настройки правил\n"
         "• Различные виды наказаний\n\n"
         "💡 Добавьте меня в группу и сделайте администратором,\n"
         "чтобы я мог полноценно работать!"
+    )
+    await callback.message.edit_text(text, reply_markup=get_main_keyboard())
+    await callback.answer()
+
+@dp.callback_query(F.data == "help")
+@check_owner()
+async def callback_help(callback: CallbackQuery, state: FSMContext):
+    """Подробная помощь по боту"""
+    text = (
+        "🆘 <b>Помощь по Puls Chat Manager</b>\n\n"
+        "🔹 <b>Основные команды:</b>\n"
+        "• /start - Главное меню\n"
+        "• /rules - Показать правила чата\n"
+        "• /addstopword - Добавить запрещенное слово\n\n"
+        
+        "🔹 <b>Как добавить бота в группу:</b>\n"
+        "1. Добавьте бота в группу\n"
+        "2. Сделайте его администратором\n"
+        "3. Настройте правила через меню\n\n"
+        
+        "🔹 <b>Запрещенные слова:</b>\n"
+        "• Добавляются командой /addstopword\n"
+        "• Можно выбрать наказание (мут/бан/кик)\n"
+        "• Можно установить время наказания\n"
+        "• Бот распознает даже с подменой букв\n"
+        "• Пример: 'мат' сработает на 'м0т', 'м@т', 'pривет' и т.д.\n\n"
+        
+        "🔹 <b>Авто-рассылка правил:</b>\n"
+        "• Бот автоматически отправляет правила\n"
+        "• Закрепляет их в чате\n"
+        "• Интервал от 5 минут до 1 года\n\n"
+        
+        "❓ Есть вопросы? Обратитесь к администратору бота."
     )
     await callback.message.edit_text(text, reply_markup=get_main_keyboard())
     await callback.answer()
@@ -375,31 +704,10 @@ async def callback_rules(callback: CallbackQuery, state: FSMContext):
         "1️⃣ Бот должен быть администратором в группе\n"
         "2️⃣ Для настройки используйте меню управления\n"
         "3️⃣ Все наказания записываются в лог\n"
-        "4️⃣ Не злоупотребляйте правами бота\n\n"
+        "4️⃣ Не злоупотребляйте правами бота\n"
+        "5️⃣ Бот проверяет ВЕСЬ текст, включая спойлеры и цитаты\n"
+        "6️⃣ Бот распознает слова даже с подменой букв\n\n"
         "⚠️ Бот не несет ответственности за неправильные настройки"
-    )
-    await callback.message.edit_text(text, reply_markup=get_main_keyboard())
-    await callback.answer()
-
-@dp.callback_query(F.data == "stats")
-@check_owner()
-async def callback_stats(callback: CallbackQuery, state: FSMContext):
-    """Статистика бота"""
-    # Получаем статистику из базы данных
-    with db.get_connection() as conn:
-        c = conn.cursor()
-        c.execute('SELECT COUNT(DISTINCT chat_id) FROM group_rules')
-        groups_count = c.fetchone()[0] or 0
-        
-        c.execute('SELECT COUNT(*) FROM banned_words')
-        words_count = c.fetchone()[0] or 0
-    
-    text = (
-        "📊 <b>Статистика бота:</b>\n\n"
-        f"📱 Групп с правилами: {groups_count}\n"
-        f"🚫 Запрещенных слов: {words_count}\n"
-        f"⏱ Активен: круглосуточно\n"
-        f"🔄 Версия: 2.0"
     )
     await callback.message.edit_text(text, reply_markup=get_main_keyboard())
     await callback.answer()
@@ -433,7 +741,7 @@ async def callback_set_rules(callback: CallbackQuery, state: FSMContext):
     """Установка правил"""
     await callback.message.edit_text(
         "📝 Отправьте текст правил для этого чата.\n"
-        "Вы можете использовать форматирование (жирный, курсив и т.д.)\n\n"
+        "Вы можете использовать форматирование (жирный, курсив, спойлеры и т.д.)\n\n"
         "✏️ Просто напишите сообщение с правилами в этот чат."
     )
     await state.set_state(RulesStates.waiting_for_rules_text)
@@ -447,19 +755,29 @@ async def process_rules_text(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    # Проверяем, что пользователь - создатель
     if not await is_creator(message.chat.id, message.from_user.id):
         await message.answer("❌ Только создатель может устанавливать правила!")
         await state.clear()
         return
     
-    # Сохраняем правила с полным форматированием
-    db.save_rules(message.chat.id, message.html_text)
+    rules_text = message.html_text if message.html_text else message.text
     
-    # Сохраняем создателя группы
+    if not rules_text:
+        await message.answer("❌ Не удалось извлечь текст правил!")
+        await state.clear()
+        return
+    
+    # Получаем информацию о чате
+    chat_title = message.chat.title
+    chat_username = message.chat.username
+    
+    db.save_rules(message.chat.id, rules_text, chat_title, chat_username)
     db.save_creator(message.chat.id, message.from_user.id)
     
-    await message.reply("✅ Правила успешно сохранены!\n\nИспользуйте /rules чтобы их увидеть.")
+    await message.reply(
+        "✅ Правила успешно сохранены!\n\n"
+        "Используйте /rules чтобы их увидеть."
+    )
     await state.clear()
 
 @dp.callback_query(F.data == "rules_auto")
@@ -525,7 +843,6 @@ async def process_interval(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    # Проверяем, что пользователь - создатель
     if not await is_creator(message.chat.id, message.from_user.id):
         await message.answer("❌ Только создатель может изменять интервал!")
         await state.clear()
@@ -562,24 +879,56 @@ async def callback_banned_words(callback: CallbackQuery, state: FSMContext):
                 'к': 'кик'
             }.get(p_type, 'неизвестно')
             
-            time_str = f"{p_time} {p_unit}"
+            time_str = f"{p_time} {p_unit}" if p_type != 'к' else "мгновенно"
             text += f"{i}. <b>{word}</b> - {punishment} на {time_str}\n"
             
             # Добавляем кнопку удаления для каждого слова
-            # (можно реализовать позже)
+            builder = InlineKeyboardBuilder()
+            builder.button(text=f"❌ Удалить {word}", callback_data=f"delword_{i}")
+            builder.button(text="◀️ Назад", callback_data="group_manage")
+            builder.adjust(1)
     else:
         text = "📝 Список запрещенных слов пуст.\n\n"
+        builder = InlineKeyboardBuilder()
+        builder.button(text="◀️ Назад", callback_data="group_manage")
     
     text += "\n➕ <b>Как добавить слово:</b>\n"
     text += "Используйте команду:\n"
     text += "<code>/addstopword слово</code>\n\n"
-    text += "Пример: /addstopword мат"
+    text += "Пример: /addstopword мат\n\n"
+    text += "⚠️ <b>Важно:</b> Бот распознает слова даже если:\n"
+    text += "• Заменять буквы похожими (p->р, 0->о)\n"
+    text += "• Писать большими или маленькими\n"
+    text += "• Добавлять пробелы/точки между буквами\n"
+    text += "• Прятать в спойлер или цитату"
     
-    builder = InlineKeyboardBuilder()
-    builder.button(text="◀️ Назад", callback_data="group_manage")
-    
-    await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    if words:
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    else:
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
+
+# Обработчик удаления слов
+@dp.callback_query(F.data.startswith("delword_"))
+@check_owner()
+@check_creator()
+async def callback_delete_word(callback: CallbackQuery, state: FSMContext):
+    """Удаление запрещенного слова"""
+    try:
+        index = int(callback.data.split("_")[1])
+        words = db.get_banned_words(callback.message.chat.id)
+        
+        if 1 <= index <= len(words):
+            word_to_delete = words[index-1][0]
+            db.remove_banned_word(callback.message.chat.id, word_to_delete)
+            await callback.answer(f"✅ Слово '{word_to_delete}' удалено!", show_alert=True)
+        else:
+            await callback.answer("❌ Слово не найдено!", show_alert=True)
+    except Exception as e:
+        await callback.answer("❌ Ошибка при удалении!", show_alert=True)
+    
+    # Обновляем список
+    await callback_banned_words(callback, state)
 
 @dp.message(Command("addstopword"))
 async def cmd_add_stopword(message: Message, state: FSMContext):
@@ -596,26 +945,33 @@ async def cmd_add_stopword(message: Message, state: FSMContext):
     if len(args) < 2:
         await message.answer(
             "❌ Использование: /addstopword слово\n\n"
-            "После этого бот запросит тип наказания и время."
+            "После этого бот запросит тип наказания и время.\n\n"
+            "Пример: /addstopword мат"
         )
         return
     
     word = args[1].strip()
-    if len(word) < 5 or len(word) > 30:
-        await message.answer("❌ Слово должно быть от 5 до 30 символов!")
+    if len(word) < 2 or len(word) > 30:
+        await message.answer("❌ Слово должно быть от 2 до 30 символов!")
         return
     
-    # Сохраняем слово и владельца сообщения в состоянии
+    # Проверяем, не существует ли уже такое слово
+    words = db.get_banned_words(message.chat.id)
+    for w, _, _, _ in words:
+        if normalize_text(w) == normalize_text(word):
+            await message.answer(f"❌ Похожее слово '{w}' уже существует в списке!")
+            return
+    
     await state.update_data(
         word=word,
-        msg_owner=f"word_{message.from_user.id}"
+        msg_owner=f"word_{message.from_user.id}",
+        f"msg_owner_{message.message_id}": message.from_user.id
     )
     
-    # Запрашиваем тип наказания
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔇 Мут (временный)", callback_data="punish_m")
-    builder.button(text="⛔️ Бан (навсегда или временный)", callback_data="punish_b")
-    builder.button(text="👢 Кик (сразу)", callback_data="punish_k")
+    builder.button(text="🔇 Мут", callback_data="punish_m")
+    builder.button(text="⛔️ Бан", callback_data="punish_b")
+    builder.button(text="👢 Кик", callback_data="punish_k")
     builder.adjust(1)
     
     await message.reply(
@@ -629,18 +985,15 @@ async def cmd_add_stopword(message: Message, state: FSMContext):
 @check_owner()
 async def process_punishment_type(callback: CallbackQuery, state: FSMContext):
     """Обработка типа наказания"""
-    # Дополнительная проверка, что это тот же пользователь
     data = await state.get_data()
     if data.get('msg_owner') != f"word_{callback.from_user.id}":
         await callback.answer("⚠️ Эта кнопка не для вас!", show_alert=True)
         return
     
-    p_type = callback.data.split('_')[1]  # punish_m -> m
-    
+    p_type = callback.data.split('_')[1]
     await state.update_data(punishment_type=p_type)
     
-    if p_type == 'к':  # Для кика время не нужно
-        # Сразу добавляем слово
+    if p_type == 'к':
         data = await state.get_data()
         success = db.add_banned_word(
             callback.message.chat.id,
@@ -653,7 +1006,8 @@ async def process_punishment_type(callback: CallbackQuery, state: FSMContext):
         if success:
             await callback.message.edit_text(
                 f"✅ Слово <b>{data['word']}</b> добавлено!\n"
-                f"Наказание: кик"
+                f"Наказание: кик (мгновенно)\n\n"
+                f"⚠️ Бот будет распознавать это слово даже с подменой букв!"
             )
         else:
             await callback.message.edit_text(
@@ -665,8 +1019,7 @@ async def process_punishment_type(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             "Введите время наказания (цифрой):\n"
             "Минимум: 1\n"
-            "Для мута максимум: 100 лет\n"
-            "Для бана максимум: 100 лет"
+            "Максимум: 36500 (100 лет)"
         )
         await state.set_state(StopWordsStates.waiting_for_time)
     
@@ -675,7 +1028,6 @@ async def process_punishment_type(callback: CallbackQuery, state: FSMContext):
 @dp.message(StopWordsStates.waiting_for_time)
 async def process_punishment_time(message: Message, state: FSMContext):
     """Обработка времени наказания"""
-    # Проверяем, что это тот же пользователь
     data = await state.get_data()
     owner_id = int(data.get('msg_owner', '0').replace('word_', ''))
     if owner_id != message.from_user.id:
@@ -688,9 +1040,8 @@ async def process_punishment_time(message: Message, state: FSMContext):
             await message.answer("❌ Время должно быть не меньше 1!")
             return
         
-        # Проверяем максимальное время для типа наказания
         p_type = data.get('punishment_type')
-        max_time = 36500 if p_type in ['м', 'б'] else 1  # 100 лет в днях
+        max_time = 36500 if p_type in ['м', 'б'] else 1
         
         if p_time > max_time:
             await message.answer(f"❌ Максимальное время: {max_time}!")
@@ -698,7 +1049,6 @@ async def process_punishment_time(message: Message, state: FSMContext):
         
         await state.update_data(punishment_time=p_time)
         
-        # Запрашиваем единицу времени
         builder = InlineKeyboardBuilder()
         builder.button(text="Минуты", callback_data="unit_m")
         builder.button(text="Часы", callback_data="unit_h")
@@ -717,32 +1067,28 @@ async def process_punishment_time(message: Message, state: FSMContext):
 @check_owner()
 async def process_punishment_unit(callback: CallbackQuery, state: FSMContext):
     """Обработка единицы времени"""
-    # Проверяем, что это тот же пользователь
     data = await state.get_data()
     if data.get('msg_owner') != f"word_{callback.from_user.id}":
         await callback.answer("⚠️ Эта кнопка не для вас!", show_alert=True)
         return
     
-    unit = callback.data.split('_')[1]  # unit_m -> m
-    
-    # Получаем все данные
+    unit = callback.data.split('_')[1]
     data = await state.get_data()
     word = data['word']
     p_type = data['punishment_type']
     p_time = data['punishment_time']
     
-    # Проверяем максимальное время в зависимости от единицы
-    if unit == 'д':
-        if p_time > MAX_MUTE_DAYS:
-            p_time = MAX_MUTE_DAYS
+    if unit == 'д' and p_time > MAX_MUTE_DAYS:
+        p_time = MAX_MUTE_DAYS
     elif unit == 'ч':
-        if p_time > MAX_MUTE_DAYS * 24:
-            p_time = MAX_MUTE_DAYS * 24
+        max_hours = MAX_MUTE_DAYS * 24
+        if p_time > max_hours:
+            p_time = max_hours
     elif unit == 'м':
-        if p_time > MAX_MUTE_DAYS * 24 * 60:
-            p_time = MAX_MUTE_DAYS * 24 * 60
+        max_minutes = MAX_MUTE_DAYS * 24 * 60
+        if p_time > max_minutes:
+            p_time = max_minutes
     
-    # Добавляем слово в базу
     success = db.add_banned_word(
         callback.message.chat.id,
         word,
@@ -758,11 +1104,16 @@ async def process_punishment_unit(callback: CallbackQuery, state: FSMContext):
             'к': 'кик'
         }.get(p_type)
         
-        time_str = f"{p_time} {unit}" if p_type != 'к' else "мгновенно"
+        time_str = f"{p_time} {unit}"
         
         await callback.message.edit_text(
             f"✅ Слово <b>{word}</b> добавлено!\n"
-            f"Наказание: {punishment_name} на {time_str}"
+            f"Наказание: {punishment_name} на {time_str}\n\n"
+            f"⚠️ Бот будет распознавать это слово:\n"
+            f"• В любом регистре\n"
+            f"• С подменой букв (p->р, 0->о)\n"
+            f"• В спойлерах и цитатах\n"
+            f"• Даже с пробелами между буквами"
         )
     else:
         await callback.message.edit_text(
@@ -776,43 +1127,56 @@ async def process_punishment_unit(callback: CallbackQuery, state: FSMContext):
 @dp.message(F.chat.type.in_({'group', 'supergroup'}))
 async def check_message(message: Message):
     """Проверяет сообщения на наличие запрещенных слов"""
-    if not message.text or message.from_user.is_bot:
+    if await is_creator(message.chat.id, message.from_user.id):
         return
     
-    # Проверяем, является ли пользователь создателем или админом
-    if await is_creator(message.chat.id, message.from_user.id):
-        return  # Создателя не наказываем
-    
     if await is_chat_admin(message.chat.id, message.from_user.id):
-        return  # Админов тоже не наказываем
+        return
     
-    # Проверяем наличие запрещенных слов
-    result = db.check_banned_word(message.chat.id, message.text)
+    full_text = extract_message_text(message)
+    
+    if not full_text:
+        return
+    
+    result = db.check_banned_word(message.chat.id, full_text)
     if result:
         word, p_type, p_time, p_unit = result
         
         try:
+            # Сохраняем нарушение в статистику
+            punishment_name = {
+                'м': 'мут',
+                'б': 'бан',
+                'к': 'кик'
+            }.get(p_type, 'неизвестно')
+            
+            db.add_violation(
+                message.chat.id,
+                message.from_user.id,
+                message.from_user.full_name or message.from_user.username or "Неизвестно",
+                word,
+                punishment_name
+            )
+            
             if p_type == 'к':
-                # Кик
                 await bot.ban_chat_member(message.chat.id, message.from_user.id)
                 await bot.unban_chat_member(message.chat.id, message.from_user.id)
                 await message.reply(
                     f"👢 Пользователь {message.from_user.full_name} был кикнут\n"
-                    f"Причина: использование запрещенного слова «{word}»"
+                    f"Причина: использование слова «{word}»\n"
+                    f"📍 Обнаружено даже с подменой букв!"
                 )
                 
             elif p_type == 'м':
-                # Мут
                 until_date = None
                 if p_time > 0:
                     if p_unit == 'м':
-                        until_date = timedelta(minutes=p_time)
+                        until_date = datetime.now() + timedelta(minutes=p_time)
                     elif p_unit == 'ч':
-                        until_date = timedelta(hours=p_time)
+                        until_date = datetime.now() + timedelta(hours=p_time)
                     elif p_unit == 'д':
-                        until_date = timedelta(days=min(p_time, MAX_MUTE_DAYS))
-                    
-                    until_date = datetime.now() + until_date
+                        days = min(p_time, MAX_MUTE_DAYS)
+                        until_date = datetime.now() + timedelta(days=days)
                 
                 permissions = ChatPermissions(can_send_messages=False)
                 await bot.restrict_chat_member(
@@ -822,24 +1186,23 @@ async def check_message(message: Message):
                     until_date=until_date
                 )
                 
-                time_str = f"{p_time} {p_unit}" if p_time > 0 else "навсегда"
+                time_str = f"{p_time} {p_unit}"
                 await message.reply(
                     f"🔇 Пользователь {message.from_user.full_name} получил мут на {time_str}\n"
-                    f"Причина: использование запрещенного слова «{word}»"
+                    f"Причина: использование слова «{word}»\n"
+                    f"📍 Обнаружено даже с подменой букв!"
                 )
                 
             elif p_type == 'б':
-                # Бан
                 until_date = None
                 if p_time > 0:
                     if p_unit == 'м':
-                        until_date = timedelta(minutes=p_time)
+                        until_date = datetime.now() + timedelta(minutes=p_time)
                     elif p_unit == 'ч':
-                        until_date = timedelta(hours=p_time)
+                        until_date = datetime.now() + timedelta(hours=p_time)
                     elif p_unit == 'д':
-                        until_date = timedelta(days=min(p_time, MAX_BAN_DAYS))
-                    
-                    until_date = datetime.now() + until_date
+                        days = min(p_time, MAX_BAN_DAYS)
+                        until_date = datetime.now() + timedelta(days=days)
                 
                 await bot.ban_chat_member(
                     message.chat.id, 
@@ -847,19 +1210,21 @@ async def check_message(message: Message):
                     until_date=until_date
                 )
                 
-                time_str = f"{p_time} {p_unit}" if p_time > 0 else "навсегда"
+                time_str = f"{p_time} {p_unit}"
                 await message.reply(
                     f"⛔️ Пользователь {message.from_user.full_name} забанен на {time_str}\n"
-                    f"Причина: использование запрещенного слова «{word}»"
+                    f"Причина: использование слова «{word}»\n"
+                    f"📍 Обнаружено даже с подменой букв!"
                 )
                 
         except Exception as e:
             logger.error(f"Ошибка при наказании: {e}")
-            await message.reply("❌ Не удалось применить наказание. Проверьте права бота.")
+            await message.reply(
+                "❌ Не удалось применить наказание. Проверьте права бота."
+            )
 
 # Фоновая задача для автоматической рассылки правил
 async def rules_broadcast_task():
-    """Фоновая задача для отправки правил"""
     while True:
         try:
             with db.get_connection() as conn:
@@ -872,24 +1237,20 @@ async def rules_broadcast_task():
                 for chat_id, enabled, interval, last_time, rules_text in c.fetchall():
                     current_time = int(time.time())
                     
-                    # Проверяем, пора ли отправлять
                     if last_time and current_time - last_time < interval:
                         continue
                     
                     try:
-                        # Отправляем правила
                         msg = await bot.send_message(
                             chat_id,
                             f"<b>📋 Напоминание правил чата:</b>\n\n{rules_text}"
                         )
                         
-                        # Пытаемся закрепить сообщение
                         try:
                             await bot.pin_chat_message(chat_id, msg.message_id)
                         except:
-                            pass  # Не получилось закрепить - не страшно
+                            pass
                         
-                        # Обновляем время последней отправки
                         db.update_last_rules(chat_id, msg.message_id)
                         
                     except Exception as e:
@@ -898,27 +1259,20 @@ async def rules_broadcast_task():
         except Exception as e:
             logger.error(f"Ошибка в фоновой задаче: {e}")
         
-        # Проверяем каждую минуту
         await asyncio.sleep(60)
 
 # Запуск бота
 async def on_startup():
-    """Действия при запуске"""
-    logger.info("Бот запущен!")
-    # Запускаем фоновую задачу
+    logger.info("🚀 Бот Puls Chat Manager запущен!")
+    logger.info(f"Администраторы: {ADMIN_IDS}")
     asyncio.create_task(rules_broadcast_task())
 
 async def on_shutdown():
-    """Действия при остановке"""
-    logger.info("Бот остановлен!")
+    logger.info("👋 Бот остановлен!")
 
 async def main():
-    """Главная функция"""
-    # Регистрируем обработчики запуска/остановки
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
-    
-    # Запускаем бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
