@@ -2,15 +2,16 @@ import asyncio
 import logging
 import re
 import time
+import json
 from datetime import datetime, timedelta
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any
 import sqlite3
 from contextlib import contextmanager
 from functools import wraps
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, CallbackQuery, ChatPermissions
+from aiogram.types import Message, CallbackQuery, ChatPermissions, MessageEntity
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -25,7 +26,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-BOT_TOKEN = "8557190026:AAHfPJ4s2jL2WYHvGs3F74U-LALDzAHH1K0"  # Замените на ваш токен
+BOT_TOKEN = "8557190026:AAFME58NZn6kdEexCUyjv5DoIhXs2-mwNpk"  # Замените на ваш токен
+BOT_USERNAME = "PulsOfficialManager_bot"  # Замените на username вашего бота (без @)
 ADMIN_IDS = [6708209142]  # Замените на ID администраторов бота
 MAX_MUTE_DAYS = 36500  # 100 лет в днях
 MAX_BAN_DAYS = 36500   # 100 лет в днях
@@ -35,9 +37,9 @@ bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# Словарь для замены похожих букв (кириллица + латиница)
+# Словарь для замены похожих букв
 SIMILAR_CHARS = {
-    'а': ['a', 'а', '@'],  # a латинская, а русская, @
+    'а': ['a', 'а', '@', '4'],
     'б': ['6', 'b', 'б'],
     'в': ['b', 'в', '8'],
     'г': ['r', 'г'],
@@ -46,7 +48,7 @@ SIMILAR_CHARS = {
     'ё': ['e', 'е', 'ё'],
     'ж': ['zh', 'ж'],
     'з': ['3', 'z', 'з'],
-    'и': ['u', 'и'],
+    'и': ['u', 'и', '1'],
     'й': ['u', 'й', 'u'],
     'к': ['k', 'к'],
     'л': ['l', 'л'],
@@ -73,17 +75,14 @@ SIMILAR_CHARS = {
     ' ': [' ', '_', '-', '.', ',', '!', '?', '@', '#', '$', '%', '^', '&', '*', '(', ')', '+', '=']
 }
 
-# Создаем обратный словарь для быстрого поиска
+# Создаем обратный словарь
 CHAR_VARIANTS = {}
 for char, variants in SIMILAR_CHARS.items():
     for variant in variants:
         CHAR_VARIANTS[variant] = char
 
 def normalize_text(text: str) -> str:
-    """
-    Нормализует текст, заменяя похожие буквы и символы
-    Пример: "пpивет" -> "привет" (p заменяется на р)
-    """
+    """Нормализует текст, заменяя похожие буквы"""
     if not text:
         return ""
     
@@ -94,51 +93,78 @@ def normalize_text(text: str) -> str:
         if char in CHAR_VARIANTS:
             result.append(CHAR_VARIANTS[char])
         else:
-            # Если символ не найден в словаре, оставляем как есть
-            # Но убираем специальные символы, которые могут быть использованы для обхода
             if char.isalnum() or char in [' ', '_', '-']:
                 result.append(char)
     
     return ''.join(result)
 
 def text_contains_word(text: str, word: str) -> bool:
-    """
-    Проверяет, содержит ли текст заданное слово с учетом:
-    - Регистра букв
-    - Похожих букв (латиница/кириллица)
-    - Специальных символов между буквами
-    - Любого положения в тексте
-    """
+    """Проверяет наличие слова с учетом подмены букв"""
     if not text or not word:
         return False
     
-    # Нормализуем оба текста
-    normalized_text = normalize_text(text.lower())
-    normalized_word = normalize_text(word.lower())
+    # Удаляем HTML теги из текста для проверки
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    normalized_text = normalize_text(text)
+    normalized_word = normalize_text(word)
     
     if not normalized_word:
         return False
     
-    # Простая проверка вхождения
+    # Проверяем вхождение слова
     if normalized_word in normalized_text:
         return True
     
-    # Проверка с учетом возможных разделителей между буквами
-    # Например: "п р и в е т" или "п.р.и.в.е.т"
+    # Проверяем с удалением всех разделителей
     text_without_spaces = re.sub(r'[^а-яa-z0-9]', '', normalized_text)
     word_without_spaces = re.sub(r'[^а-яa-z0-9]', '', normalized_word)
     
     if word_without_spaces and word_without_spaces in text_without_spaces:
         return True
     
-    # Проверка на границы слов (чтобы "мат" не находилось в "математика")
-    pattern = r'\b' + re.escape(normalized_word) + r'\b'
-    if re.search(pattern, normalized_text):
-        return True
-    
     return False
 
-# Классы состояний для FSM
+def entities_to_json(entities: Optional[List[MessageEntity]]) -> Optional[str]:
+    """Конвертирует список entities в JSON для сохранения в БД"""
+    if not entities:
+        return None
+    
+    entities_list = []
+    for entity in entities:
+        entities_list.append({
+            'type': entity.type,
+            'offset': entity.offset,
+            'length': entity.length,
+            'url': entity.url,
+            'language': entity.language,
+            'custom_emoji_id': entity.custom_emoji_id
+        })
+    return json.dumps(entities_list, ensure_ascii=False)
+
+def json_to_entities(json_str: Optional[str]) -> Optional[List[MessageEntity]]:
+    """Конвертирует JSON обратно в список entities"""
+    if not json_str:
+        return None
+    
+    try:
+        entities_list = json.loads(json_str)
+        result = []
+        for e in entities_list:
+            entity = MessageEntity(
+                type=e['type'],
+                offset=e['offset'],
+                length=e['length'],
+                url=e.get('url'),
+                language=e.get('language'),
+                custom_emoji_id=e.get('custom_emoji_id')
+            )
+            result.append(entity)
+        return result
+    except:
+        return None
+
+# Классы состояний
 class RulesStates(StatesGroup):
     waiting_for_rules_text = State()
     waiting_for_interval = State()
@@ -149,7 +175,7 @@ class StopWordsStates(StatesGroup):
     waiting_for_time = State()
     waiting_for_unit = State()
 
-# Декоратор для проверки владельца кнопки
+# Декораторы проверки прав
 def check_owner():
     def decorator(func):
         @wraps(func)
@@ -159,23 +185,17 @@ def check_owner():
             
             if state:
                 data = await state.get_data()
-                message_owner = None
-                
                 for key in data:
                     if key.startswith('msg_owner_'):
                         if str(callback.message.message_id) in key:
-                            message_owner = data[key]
+                            if data[key] != user_id:
+                                await callback.answer("⚠️ Эта кнопка не для вас!", show_alert=True)
+                                return
                             break
-                
-                if message_owner and message_owner != user_id:
-                    await callback.answer("⚠️ Эта кнопка не для вас!", show_alert=True)
-                    return
-            
             return await func(callback, *args, **kwargs)
         return wrapper
     return decorator
 
-# Декоратор для проверки прав создателя группы
 def check_creator():
     def decorator(func):
         @wraps(func)
@@ -198,7 +218,6 @@ def check_creator():
         return wrapper
     return decorator
 
-# Декоратор для проверки прав администратора бота
 def check_bot_admin():
     def decorator(func):
         @wraps(func)
@@ -210,7 +229,7 @@ def check_bot_admin():
         return wrapper
     return decorator
 
-# Работа с базой данных
+# Класс базы данных
 class Database:
     def __init__(self, db_path="puls_manager.db"):
         self.db_path = db_path
@@ -228,10 +247,11 @@ class Database:
         with self.get_connection() as conn:
             c = conn.cursor()
             
-            # Таблица для правил групп
+            # Таблица для правил групп - теперь храним текст и entities отдельно
             c.execute('''CREATE TABLE IF NOT EXISTS group_rules
                          (chat_id INTEGER PRIMARY KEY,
                           rules_text TEXT,
+                          rules_entities TEXT,
                           rules_enabled INTEGER DEFAULT 0,
                           rules_interval INTEGER DEFAULT 300,
                           last_rules_message_id INTEGER,
@@ -239,7 +259,6 @@ class Database:
                           chat_title TEXT,
                           chat_username TEXT)''')
             
-            # Таблица для запрещенных слов
             c.execute('''CREATE TABLE IF NOT EXISTS banned_words
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           chat_id INTEGER,
@@ -249,12 +268,10 @@ class Database:
                           punishment_unit TEXT,
                           UNIQUE(chat_id, word))''')
             
-            # Таблица для создателей групп
             c.execute('''CREATE TABLE IF NOT EXISTS group_creators
                          (chat_id INTEGER PRIMARY KEY,
                           creator_id INTEGER)''')
             
-            # Таблица для статистики нарушений
             c.execute('''CREATE TABLE IF NOT EXISTS violations
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           chat_id INTEGER,
@@ -266,22 +283,22 @@ class Database:
             
             conn.commit()
     
-    # Методы для правил
-    def save_rules(self, chat_id: int, rules_text: str, chat_title: str = None, chat_username: str = None):
+    def save_rules(self, chat_id: int, rules_text: str, rules_entities: Optional[str], 
+                   chat_title: str = None, chat_username: str = None):
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute('''INSERT OR REPLACE INTO group_rules 
-                         (chat_id, rules_text, chat_title, chat_username) 
-                         VALUES (?, ?, ?, ?)''', 
-                         (chat_id, rules_text, chat_title, chat_username))
+                         (chat_id, rules_text, rules_entities, chat_title, chat_username) 
+                         VALUES (?, ?, ?, ?, ?)''', 
+                         (chat_id, rules_text, rules_entities, chat_title, chat_username))
             conn.commit()
     
-    def get_rules(self, chat_id: int) -> Optional[str]:
+    def get_rules(self, chat_id: int) -> Tuple[Optional[str], Optional[str]]:
         with self.get_connection() as conn:
             c = conn.cursor()
-            c.execute('SELECT rules_text FROM group_rules WHERE chat_id = ?', (chat_id,))
+            c.execute('SELECT rules_text, rules_entities FROM group_rules WHERE chat_id = ?', (chat_id,))
             result = c.fetchone()
-            return result[0] if result else None
+            return (result[0], result[1]) if result else (None, None)
     
     def set_rules_settings(self, chat_id: int, enabled: bool, interval: int):
         with self.get_connection() as conn:
@@ -314,7 +331,6 @@ class Database:
                          WHERE chat_id = ?''', (message_id, int(time.time()), chat_id))
             conn.commit()
     
-    # Методы для запрещенных слов
     def add_banned_word(self, chat_id: int, word: str, punishment_type: str, 
                        punishment_time: int, punishment_unit: str):
         with self.get_connection() as conn:
@@ -345,7 +361,6 @@ class Database:
             return c.fetchall()
     
     def check_banned_word(self, chat_id: int, text: str):
-        """Проверяет текст на наличие запрещенных слов с учетом похожих букв"""
         if not text:
             return None
         
@@ -359,7 +374,6 @@ class Database:
                     return (word, p_type, p_time, p_unit)
             return None
     
-    # Методы для создателей групп
     def save_creator(self, chat_id: int, creator_id: int):
         with self.get_connection() as conn:
             c = conn.cursor()
@@ -374,7 +388,6 @@ class Database:
             result = c.fetchone()
             return result[0] if result else None
     
-    # Методы для статистики нарушений
     def add_violation(self, chat_id: int, user_id: int, user_name: str, word: str, punishment: str):
         with self.get_connection() as conn:
             c = conn.cursor()
@@ -384,9 +397,7 @@ class Database:
                          (chat_id, user_id, user_name, word, punishment, int(time.time())))
             conn.commit()
     
-    # Методы для статистики админа
     def get_all_chats(self):
-        """Получает список всех чатов, где есть бот"""
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute('''SELECT chat_id, chat_title, chat_username, rules_enabled,
@@ -396,27 +407,21 @@ class Database:
             return c.fetchall()
     
     def get_total_stats(self):
-        """Получает общую статистику"""
         with self.get_connection() as conn:
             c = conn.cursor()
             
-            # Всего групп
             c.execute('SELECT COUNT(DISTINCT chat_id) FROM group_rules')
             total_groups = c.fetchone()[0] or 0
             
-            # Всего запрещенных слов
             c.execute('SELECT COUNT(*) FROM banned_words')
             total_words = c.fetchone()[0] or 0
             
-            # Всего нарушений
             c.execute('SELECT COUNT(*) FROM violations')
             total_violations = c.fetchone()[0] or 0
             
-            # Уникальных нарушителей
             c.execute('SELECT COUNT(DISTINCT user_id) FROM violations')
             unique_users = c.fetchone()[0] or 0
             
-            # Последние 10 нарушений
             c.execute('''SELECT chat_id, user_name, word, punishment, timestamp 
                          FROM violations ORDER BY timestamp DESC LIMIT 10''')
             recent = c.fetchall()
@@ -429,12 +434,10 @@ class Database:
                 'recent': recent
             }
 
-# Создаем экземпляр базы данных
 db = Database()
 
 # Вспомогательные функции
 async def is_chat_admin(chat_id: int, user_id: int) -> bool:
-    """Проверяет, является ли пользователь администратором чата"""
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status in ['creator', 'administrator']
@@ -442,7 +445,6 @@ async def is_chat_admin(chat_id: int, user_id: int) -> bool:
         return False
 
 async def is_creator(chat_id: int, user_id: int) -> bool:
-    """Проверяет, является ли пользователь создателем чата"""
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         return member.status == 'creator'
@@ -450,31 +452,27 @@ async def is_creator(chat_id: int, user_id: int) -> bool:
         return False
 
 def format_interval(seconds: int) -> str:
-    """Форматирует интервал в читаемый вид"""
     if seconds < 60:
         return f"{seconds} сек"
     elif seconds < 3600:
-        minutes = seconds // 60
-        return f"{minutes} мин"
+        return f"{seconds // 60} мин"
     elif seconds < 86400:
-        hours = seconds // 3600
-        return f"{hours} ч"
+        return f"{seconds // 3600} ч"
     else:
-        days = seconds // 86400
-        return f"{days} дн"
+        return f"{seconds // 86400} дн"
 
+# Клавиатуры
 def get_main_keyboard():
-    """Создает главное меню"""
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 О боте", callback_data="about")
     builder.button(text="🆘 Помощь", callback_data="help")
     builder.button(text="📜 Правила", callback_data="rules")
+    builder.button(text="➕ Добавить в группу", url=f"https://t.me/{BOT_USERNAME}?startgroup=true")
     builder.button(text="⚙️ Управление группой", callback_data="group_manage")
     builder.adjust(1)
     return builder.as_markup()
 
 def get_group_manage_keyboard():
-    """Создает клавиатуру управления группой"""
     builder = InlineKeyboardBuilder()
     builder.button(text="📝 Установить правила", callback_data="set_rules")
     builder.button(text="🔄 Авто-рассылка правил", callback_data="rules_auto")
@@ -484,7 +482,6 @@ def get_group_manage_keyboard():
     return builder.as_markup()
 
 def get_rules_auto_keyboard(enabled: bool):
-    """Создает клавиатуру для авто-рассылки правил"""
     builder = InlineKeyboardBuilder()
     status = "✅ Включено" if enabled else "❌ Выключено"
     builder.button(text=f"Статус: {status}", callback_data="toggle_rules")
@@ -493,51 +490,10 @@ def get_rules_auto_keyboard(enabled: bool):
     builder.adjust(1)
     return builder.as_markup()
 
-def extract_message_text(message: Message) -> str:
-    """
-    Извлекает полный текст сообщения, включая:
-    - Обычный текст
-    - Текст под спойлером
-    - Текст в caption
-    - Цитируемый текст
-    """
-    text_parts = []
-    
-    if message.text:
-        text_parts.append(message.text)
-    
-    if message.caption:
-        text_parts.append(message.caption)
-    
-    if message.reply_to_message:
-        reply = message.reply_to_message
-        if reply.text:
-            text_parts.append(reply.text)
-        if reply.caption:
-            text_parts.append(reply.caption)
-    
-    entities = []
-    if message.entities:
-        entities.extend(message.entities)
-    if message.caption_entities:
-        entities.extend(message.caption_entities)
-    
-    for entity in entities:
-        if entity.type == 'spoiler':
-            if message.text:
-                spoiler_text = message.text[entity.offset:entity.offset + entity.length]
-                text_parts.append(spoiler_text)
-            elif message.caption:
-                spoiler_text = message.caption[entity.offset:entity.offset + entity.length]
-                text_parts.append(spoiler_text)
-    
-    return " ".join(text_parts) if text_parts else ""
-
-# Команды для администраторов бота
+# Команды админа
 @dp.message(Command("adminstats"))
 @check_bot_admin()
 async def cmd_admin_stats(message: Message):
-    """Статистика для администратора бота"""
     stats = db.get_total_stats()
     chats = db.get_all_chats()
     
@@ -561,18 +517,11 @@ async def cmd_admin_stats(message: Message):
             status = "✅" if enabled else "❌"
             text += f"{status} {chat_info} | Слов: {words_count}\n"
     
-    if stats['recent']:
-        text += "\n<b>🕐 Последние нарушения:</b>\n"
-        for chat_id, user_name, word, punishment, timestamp in stats['recent'][:5]:
-            date = datetime.fromtimestamp(timestamp).strftime('%d.%m %H:%M')
-            text += f"• {date} - {user_name}: {word} ({punishment})\n"
-    
     await message.answer(text)
 
 @dp.message(Command("adminchats"))
 @check_bot_admin()
 async def cmd_admin_chats(message: Message):
-    """Показывает все чаты, где есть бот"""
     chats = db.get_all_chats()
     
     if not chats:
@@ -586,7 +535,6 @@ async def cmd_admin_chats(message: Message):
             link = f"https://t.me/{username}"
             chat_info = f"• <a href='{link}'>{title or 'Без названия'}</a>"
         else:
-            # Для частных групп создаем пригласительную ссылку
             try:
                 invite_link = await bot.create_chat_invite_link(chat_id, member_limit=1)
                 chat_info = f"• <a href='{invite_link.invite_link}'>{title or 'Приватная группа'}</a>"
@@ -596,17 +544,11 @@ async def cmd_admin_chats(message: Message):
         status = "✅" if enabled else "❌"
         text += f"{status} {chat_info} | ID: <code>{chat_id}</code> | Слов: {words_count}\n"
     
-    # Разбиваем на части, если сообщение слишком длинное
-    if len(text) > 4000:
-        for i in range(0, len(text), 4000):
-            await message.answer(text[i:i+4000])
-    else:
-        await message.answer(text)
+    await message.answer(text)
 
-# Обработчики команд
+# Основные команды
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    """Обработчик команды /start"""
     await state.update_data({f"msg_owner_{message.message_id}": message.from_user.id})
     
     text = (
@@ -616,48 +558,52 @@ async def cmd_start(message: Message, state: FSMContext):
         "🔹 <b>Мои возможности:</b>\n"
         "• Установка и автоматическая рассылка правил\n"
         "• Блокировка запрещенных слов\n"
-        "• Распознаю слова даже с подменой букв (p -> р, 0 -> о и т.д.)\n"
+        "• Распознаю слова даже с подменой букв\n"
+        "• Сохраняю всё форматирование, спойлеры и цитаты\n"
         "• Автоматические наказания (мут/бан/кик)\n\n"
-        "Выберите интересующий раздел в меню ниже 👇"
+        "👇 Нажмите «➕ Добавить в группу» чтобы пригласить меня в ваш чат"
     )
     await message.answer(text, reply_markup=get_main_keyboard())
 
 @dp.message(Command("startpuls"))
 async def cmd_startpuls(message: Message, state: FSMContext):
-    """Альтернативная команда старта"""
     await cmd_start(message, state)
 
 @dp.message(Command("rules"))
 @dp.message(Command("rulesgroup"))
 @dp.message(F.text.lower() == "правила чата")
 async def cmd_rules(message: Message):
-    """Показывает правила чата"""
     if message.chat.type == 'private':
         await message.answer("❌ Эта команда работает только в группах!")
         return
     
-    rules = db.get_rules(message.chat.id)
-    if rules:
-        await message.reply(f"<b>📜 Правила чата:</b>\n\n{rules}")
+    rules_text, rules_entities_json = db.get_rules(message.chat.id)
+    if rules_text and rules_entities_json:
+        rules_entities = json_to_entities(rules_entities_json)
+        await message.reply(
+            text=rules_text,
+            entities=rules_entities
+        )
+    elif rules_text:
+        # Если есть только текст без entities (старые записи)
+        await message.reply(f"<b>📜 Правила чата:</b>\n\n{rules_text}", parse_mode="HTML")
     else:
         await message.answer("❓ В этом чате еще не установлены правила.")
 
-# Обработчики колбэков
+# Callback handlers
 @dp.callback_query(F.data == "about")
 @check_owner()
 async def callback_about(callback: CallbackQuery, state: FSMContext):
-    """Информация о боте"""
     text = (
         "🤖 <b>Puls Chat Manager</b>\n\n"
         "📌 <b>Что я умею:</b>\n"
         "• Автоматическая модерация\n"
         "• Борьба со спамом и запрещенными словами\n"
-        "• Распознаю слова с подменой букв (p -> р, 0 -> о)\n"
-        "• Проверяю спойлеры и цитаты\n"
+        "• Распознаю слова с подменой букв\n"
+        "• Сохраняю форматирование, спойлеры и цитаты\n"
         "• Гибкие настройки правил\n"
         "• Различные виды наказаний\n\n"
-        "💡 Добавьте меня в группу и сделайте администратором,\n"
-        "чтобы я мог полноценно работать!"
+        "👇 Нажмите «➕ Добавить в группу» чтобы пригласить меня в ваш чат"
     )
     await callback.message.edit_text(text, reply_markup=get_main_keyboard())
     await callback.answer()
@@ -665,7 +611,6 @@ async def callback_about(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "help")
 @check_owner()
 async def callback_help(callback: CallbackQuery, state: FSMContext):
-    """Подробная помощь по боту"""
     text = (
         "🆘 <b>Помощь по Puls Chat Manager</b>\n\n"
         "🔹 <b>Основные команды:</b>\n"
@@ -674,23 +619,28 @@ async def callback_help(callback: CallbackQuery, state: FSMContext):
         "• /addstopword - Добавить запрещенное слово\n\n"
         
         "🔹 <b>Как добавить бота в группу:</b>\n"
-        "1. Добавьте бота в группу\n"
-        "2. Сделайте его администратором\n"
-        "3. Настройте правила через меню\n\n"
+        "1. Нажмите кнопку «➕ Добавить в группу» в меню\n"
+        "2. Выберите чат из списка\n"
+        "3. Сделайте бота администратором\n"
+        "4. Настройте правила через меню\n\n"
         
         "🔹 <b>Запрещенные слова:</b>\n"
         "• Добавляются командой /addstopword\n"
         "• Можно выбрать наказание (мут/бан/кик)\n"
-        "• Можно установить время наказания\n"
         "• Бот распознает даже с подменой букв\n"
-        "• Пример: 'мат' сработает на 'м0т', 'м@т', 'pривет' и т.д.\n\n"
+        "• Пример: 'мат' сработает на 'м0т', 'pривет'\n\n"
         
         "🔹 <b>Авто-рассылка правил:</b>\n"
         "• Бот автоматически отправляет правила\n"
         "• Закрепляет их в чате\n"
         "• Интервал от 5 минут до 1 года\n\n"
         
-        "❓ Есть вопросы? Обратитесь к администратору бота."
+        "🔹 <b>Форматирование правил:</b>\n"
+        "• <b>Жирный</b> - <code>&lt;b&gt;текст&lt;/b&gt;</code>\n"
+        "• <i>Курсив</i> - <code>&lt;i&gt;текст&lt;/i&gt;</code>\n"
+        "• <tg-spoiler>Спойлер</tg-spoiler> - <code>&lt;tg-spoiler&gt;текст&lt;/tg-spoiler&gt;</code>\n"
+        "• <blockquote>Цитата</blockquote> - <code>&lt;blockquote&gt;текст&lt;/blockquote&gt;</code>\n"
+        "• <blockquote expandable>Свернутая цитата\nНовая строка</blockquote> - <code>&lt;blockquote expandable&gt;текст\nстроки&lt;/blockquote&gt;</code>"
     )
     await callback.message.edit_text(text, reply_markup=get_main_keyboard())
     await callback.answer()
@@ -698,15 +648,13 @@ async def callback_help(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "rules")
 @check_owner()
 async def callback_rules(callback: CallbackQuery, state: FSMContext):
-    """Показывает правила использования бота"""
     text = (
         "📋 <b>Правила использования бота:</b>\n\n"
         "1️⃣ Бот должен быть администратором в группе\n"
         "2️⃣ Для настройки используйте меню управления\n"
         "3️⃣ Все наказания записываются в лог\n"
         "4️⃣ Не злоупотребляйте правами бота\n"
-        "5️⃣ Бот проверяет ВЕСЬ текст, включая спойлеры и цитаты\n"
-        "6️⃣ Бот распознает слова даже с подменой букв\n\n"
+        "5️⃣ Бот сохраняет всё форматирование и цитаты\n\n"
         "⚠️ Бот не несет ответственности за неправильные настройки"
     )
     await callback.message.edit_text(text, reply_markup=get_main_keyboard())
@@ -716,7 +664,6 @@ async def callback_rules(callback: CallbackQuery, state: FSMContext):
 @check_owner()
 @check_creator()
 async def callback_group_manage(callback: CallbackQuery, state: FSMContext):
-    """Управление группой"""
     await callback.message.edit_text(
         "⚙️ <b>Управление группой</b>\n\n"
         "Выберите действие:",
@@ -727,7 +674,6 @@ async def callback_group_manage(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "back_to_main")
 @check_owner()
 async def callback_back_to_main(callback: CallbackQuery, state: FSMContext):
-    """Возврат в главное меню"""
     await callback.message.edit_text(
         "👋 Главное меню:",
         reply_markup=get_main_keyboard()
@@ -738,18 +684,24 @@ async def callback_back_to_main(callback: CallbackQuery, state: FSMContext):
 @check_owner()
 @check_creator()
 async def callback_set_rules(callback: CallbackQuery, state: FSMContext):
-    """Установка правил"""
     await callback.message.edit_text(
         "📝 Отправьте текст правил для этого чата.\n"
-        "Вы можете использовать форматирование (жирный, курсив, спойлеры и т.д.)\n\n"
-        "✏️ Просто напишите сообщение с правилами в этот чат."
+        "Вы можете использовать любое форматирование:\n"
+        "• Жирный, курсив, подчеркнутый\n"
+        "• Спойлеры (скрытый текст)\n"
+        "• Цитаты (в том числе свернутые)\n"
+        "• Списки и ссылки\n\n"
+        "✏️ Просто напишите сообщение с правилами в этот чат.\n"
+        "Бот сохранит всё форматирование!\n\n"
+        "💡 <b>Важно для свернутых цитат:</b>\n"
+        "Внутри <code>&lt;blockquote expandable&gt;</code> должно быть\n"
+        "<b>несколько строк</b>, чтобы цитата сворачивалась!"
     )
     await state.set_state(RulesStates.waiting_for_rules_text)
     await callback.answer()
 
 @dp.message(RulesStates.waiting_for_rules_text)
 async def process_rules_text(message: Message, state: FSMContext):
-    """Обработка текста правил"""
     if message.chat.type == 'private':
         await message.answer("❌ Эта команда работает только в группах!")
         await state.clear()
@@ -760,23 +712,40 @@ async def process_rules_text(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    rules_text = message.html_text if message.html_text else message.text
+    # Сохраняем текст и entities отдельно
+    rules_text = message.text or message.caption
+    rules_entities = message.entities or message.caption_entities
     
     if not rules_text:
         await message.answer("❌ Не удалось извлечь текст правил!")
         await state.clear()
         return
     
-    # Получаем информацию о чате
+    # Проверяем, что текст достаточно длинный
+    if len(rules_text.strip()) < 10:
+        await message.answer("❌ Правила слишком короткие!")
+        await state.clear()
+        return
+    
+    # Конвертируем entities в JSON для сохранения
+    rules_entities_json = entities_to_json(rules_entities)
+    
     chat_title = message.chat.title
     chat_username = message.chat.username
     
-    db.save_rules(message.chat.id, rules_text, chat_title, chat_username)
+    db.save_rules(message.chat.id, rules_text, rules_entities_json, chat_title, chat_username)
     db.save_creator(message.chat.id, message.from_user.id)
     
     await message.reply(
-        "✅ Правила успешно сохранены!\n\n"
-        "Используйте /rules чтобы их увидеть."
+        "✅ <b>Правила успешно сохранены!</b>\n\n"
+        "Всё форматирование сохранено:\n"
+        "• <b>жирный текст</b>\n"
+        "• <i>курсив</i>\n"
+        "• <tg-spoiler>спойлеры</tg-spoiler>\n"
+        "• <blockquote>цитаты</blockquote>\n"
+        "• <blockquote expandable>свернутые цитаты\nс несколькими строками</blockquote>\n\n"
+        "Используйте /rules чтобы проверить.",
+        parse_mode="HTML"
     )
     await state.clear()
 
@@ -784,7 +753,6 @@ async def process_rules_text(message: Message, state: FSMContext):
 @check_owner()
 @check_creator()
 async def callback_rules_auto(callback: CallbackQuery, state: FSMContext):
-    """Настройка авто-рассылки правил"""
     enabled, interval, _, _ = db.get_rules_settings(callback.message.chat.id)
     
     text = (
@@ -802,7 +770,6 @@ async def callback_rules_auto(callback: CallbackQuery, state: FSMContext):
 @check_owner()
 @check_creator()
 async def callback_toggle_rules(callback: CallbackQuery, state: FSMContext):
-    """Включение/выключение авто-рассылки"""
     enabled, interval, _, _ = db.get_rules_settings(callback.message.chat.id)
     new_enabled = not bool(enabled)
     
@@ -822,22 +789,19 @@ async def callback_toggle_rules(callback: CallbackQuery, state: FSMContext):
 @check_owner()
 @check_creator()
 async def callback_set_interval(callback: CallbackQuery, state: FSMContext):
-    """Установка интервала"""
     await callback.message.edit_text(
-        "⏱ Введите интервал в минутах (от 5 минут до 525600 минут = 1 год):\n"
-        "Например:\n"
-        "• 60 (1 час)\n"
-        "• 1440 (1 день)\n"
-        "• 10080 (1 неделя)\n"
-        "• 43200 (1 месяц)\n\n"
-        "Просто напишите число в чат:"
+        "⏱ Введите интервал в минутах (от 5 до 525600):\n"
+        "Примеры:\n"
+        "• 60 = 1 час\n"
+        "• 1440 = 1 день\n"
+        "• 10080 = 1 неделя\n"
+        "• 43200 = 1 месяц"
     )
     await state.set_state(RulesStates.waiting_for_interval)
     await callback.answer()
 
 @dp.message(RulesStates.waiting_for_interval)
 async def process_interval(message: Message, state: FSMContext):
-    """Обработка интервала"""
     if message.chat.type == 'private':
         await message.answer("❌ Эта команда работает только в группах!")
         await state.clear()
@@ -867,11 +831,10 @@ async def process_interval(message: Message, state: FSMContext):
 @check_owner()
 @check_creator()
 async def callback_banned_words(callback: CallbackQuery, state: FSMContext):
-    """Управление запрещенными словами"""
     words = db.get_banned_words(callback.message.chat.id)
     
     if words:
-        text = "🚫 <b>Запрещенные слова:</b>\n\n"
+        text = "🚫 <b>Запрещенные слова в этом чате:</b>\n\n"
         for i, (word, p_type, p_time, p_unit) in enumerate(words, 1):
             punishment = {
                 'м': 'мут',
@@ -880,55 +843,22 @@ async def callback_banned_words(callback: CallbackQuery, state: FSMContext):
             }.get(p_type, 'неизвестно')
             
             time_str = f"{p_time} {p_unit}" if p_type != 'к' else "мгновенно"
-            text += f"{i}. <b>{word}</b> - {punishment} на {time_str}\n"
-            
-            # Добавляем кнопку удаления для каждого слова
-            builder = InlineKeyboardBuilder()
-            builder.button(text=f"❌ Удалить {word}", callback_data=f"delword_{i}")
-            builder.button(text="◀️ Назад", callback_data="group_manage")
-            builder.adjust(1)
-    else:
-        text = "📝 Список запрещенных слов пуст.\n\n"
-        builder = InlineKeyboardBuilder()
-        builder.button(text="◀️ Назад", callback_data="group_manage")
-    
-    text += "\n➕ <b>Как добавить слово:</b>\n"
-    text += "Используйте команду:\n"
-    text += "<code>/addstopword слово</code>\n\n"
-    text += "Пример: /addstopword мат\n\n"
-    text += "⚠️ <b>Важно:</b> Бот распознает слова даже если:\n"
-    text += "• Заменять буквы похожими (p->р, 0->о)\n"
-    text += "• Писать большими или маленькими\n"
-    text += "• Добавлять пробелы/точки между буквами\n"
-    text += "• Прятать в спойлер или цитату"
-    
-    if words:
-        await callback.message.edit_text(text, reply_markup=builder.as_markup())
-    else:
-        await callback.message.edit_text(text, reply_markup=builder.as_markup())
-    await callback.answer()
-
-# Обработчик удаления слов
-@dp.callback_query(F.data.startswith("delword_"))
-@check_owner()
-@check_creator()
-async def callback_delete_word(callback: CallbackQuery, state: FSMContext):
-    """Удаление запрещенного слова"""
-    try:
-        index = int(callback.data.split("_")[1])
-        words = db.get_banned_words(callback.message.chat.id)
+            text += f"{i}. <b>{word}</b> — {punishment} на {time_str}\n"
         
-        if 1 <= index <= len(words):
-            word_to_delete = words[index-1][0]
-            db.remove_banned_word(callback.message.chat.id, word_to_delete)
-            await callback.answer(f"✅ Слово '{word_to_delete}' удалено!", show_alert=True)
-        else:
-            await callback.answer("❌ Слово не найдено!", show_alert=True)
-    except Exception as e:
-        await callback.answer("❌ Ошибка при удалении!", show_alert=True)
+        text += "\n"
+    else:
+        text = "📝 В этом чате пока нет запрещенных слов.\n\n"
     
-    # Обновляем список
-    await callback_banned_words(callback, state)
+    text += "➕ <b>Добавить слово:</b>\n"
+    text += "Используйте команду /addstopword слово\n"
+    text += "Пример: /addstopword мат\n\n"
+    text += "⚠️ Бот распознает слова даже с подменой букв!"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="◀️ Назад", callback_data="group_manage")
+    
+    await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    await callback.answer()
 
 @dp.message(Command("addstopword"))
 async def cmd_add_stopword(message: Message, state: FSMContext):
@@ -1030,6 +960,7 @@ async def process_punishment_time(message: Message, state: FSMContext):
     """Обработка времени наказания"""
     data = await state.get_data()
     owner_id = int(data.get('msg_owner', '0').replace('word_', ''))
+    
     if owner_id != message.from_user.id:
         await message.answer("❌ Эта команда не для вас!")
         return
@@ -1127,23 +1058,26 @@ async def process_punishment_unit(callback: CallbackQuery, state: FSMContext):
 @dp.message(F.chat.type.in_({'group', 'supergroup'}))
 async def check_message(message: Message):
     """Проверяет сообщения на наличие запрещенных слов"""
+    if message.from_user.is_bot:
+        return
+    
     if await is_creator(message.chat.id, message.from_user.id):
         return
     
     if await is_chat_admin(message.chat.id, message.from_user.id):
         return
     
-    full_text = extract_message_text(message)
+    # Получаем текст сообщения (включая HTML форматирование)
+    text_to_check = message.html_text or message.caption or ""
     
-    if not full_text:
+    if not text_to_check:
         return
     
-    result = db.check_banned_word(message.chat.id, full_text)
+    result = db.check_banned_word(message.chat.id, text_to_check)
     if result:
         word, p_type, p_time, p_unit = result
         
         try:
-            # Сохраняем нарушение в статистику
             punishment_name = {
                 'м': 'мут',
                 'б': 'бан',
@@ -1162,7 +1096,7 @@ async def check_message(message: Message):
                 await bot.ban_chat_member(message.chat.id, message.from_user.id)
                 await bot.unban_chat_member(message.chat.id, message.from_user.id)
                 await message.reply(
-                    f"👢 Пользователь {message.from_user.full_name} был кикнут\n"
+                    f"👢 Пользователь {message.from_user.full_name} кикнут\n"
                     f"Причина: использование слова «{word}»\n"
                     f"📍 Обнаружено даже с подменой букв!"
                 )
@@ -1188,8 +1122,8 @@ async def check_message(message: Message):
                 
                 time_str = f"{p_time} {p_unit}"
                 await message.reply(
-                    f"🔇 Пользователь {message.from_user.full_name} получил мут на {time_str}\n"
-                    f"Причина: использование слова «{word}»\n"
+                    f"🔇 {message.from_user.full_name} получил мут на {time_str}\n"
+                    f"Причина: слово «{word}»\n"
                     f"📍 Обнаружено даже с подменой букв!"
                 )
                 
@@ -1212,16 +1146,14 @@ async def check_message(message: Message):
                 
                 time_str = f"{p_time} {p_unit}"
                 await message.reply(
-                    f"⛔️ Пользователь {message.from_user.full_name} забанен на {time_str}\n"
-                    f"Причина: использование слова «{word}»\n"
+                    f"⛔️ {message.from_user.full_name} забанен на {time_str}\n"
+                    f"Причина: слово «{word}»\n"
                     f"📍 Обнаружено даже с подменой букв!"
                 )
                 
         except Exception as e:
             logger.error(f"Ошибка при наказании: {e}")
-            await message.reply(
-                "❌ Не удалось применить наказание. Проверьте права бота."
-            )
+            await message.reply("❌ Не удалось применить наказание. Проверьте права бота.")
 
 # Фоновая задача для автоматической рассылки правил
 async def rules_broadcast_task():
@@ -1230,21 +1162,30 @@ async def rules_broadcast_task():
             with db.get_connection() as conn:
                 c = conn.cursor()
                 c.execute('''SELECT chat_id, rules_enabled, rules_interval, 
-                                   last_rules_time, rules_text 
+                                   last_rules_time, rules_text, rules_entities 
                             FROM group_rules 
                             WHERE rules_enabled = 1 AND rules_text IS NOT NULL''')
                 
-                for chat_id, enabled, interval, last_time, rules_text in c.fetchall():
+                for chat_id, enabled, interval, last_time, rules_text, rules_entities_json in c.fetchall():
                     current_time = int(time.time())
                     
                     if last_time and current_time - last_time < interval:
                         continue
                     
                     try:
-                        msg = await bot.send_message(
-                            chat_id,
-                            f"<b>📋 Напоминание правил чата:</b>\n\n{rules_text}"
-                        )
+                        if rules_entities_json:
+                            rules_entities = json_to_entities(rules_entities_json)
+                            msg = await bot.send_message(
+                                chat_id,
+                                text=f"<b>📋 Напоминание правил чата:</b>\n\n{rules_text}",
+                                entities=rules_entities
+                            )
+                        else:
+                            msg = await bot.send_message(
+                                chat_id,
+                                text=f"<b>📋 Напоминание правил чата:</b>\n\n{rules_text}",
+                                parse_mode="HTML"
+                            )
                         
                         try:
                             await bot.pin_chat_message(chat_id, msg.message_id)
@@ -1265,6 +1206,7 @@ async def rules_broadcast_task():
 async def on_startup():
     logger.info("🚀 Бот Puls Chat Manager запущен!")
     logger.info(f"Администраторы: {ADMIN_IDS}")
+    logger.info(f"Username: @{BOT_USERNAME}")
     asyncio.create_task(rules_broadcast_task())
 
 async def on_shutdown():
