@@ -131,6 +131,18 @@ TRANSLATIONS = {
         'add_to_group': "➕ Добавить в группу",
         'group_manage': "⚙️ Управление группой",
         'back': "◀️ Назад",
+        
+        # Привязка группы
+        'group_not_linked': "❌ Группа еще не привязана к вашему аккаунту.",
+        'want_to_link': "Хотите привязать эту группу?",
+        'link_group': "✅ Привязать группу",
+        'unlink_group': "❌ Отвязать группу",
+        'confirm_unlink': "Вы уверены, что хотите отвязать группу?",
+        'cancel': "🚫 Отмена",
+        'group_linked': "✅ Группа успешно привязана! Теперь вы можете настроить её в ЛС.",
+        'group_unlinked': "✅ Группа отвязана от вашего аккаунта.",
+        'settings_in_pm': "Настраивать группу можно только в личных сообщениях с ботом.",
+        'go_to_pm_settings': "📱 Перейти в ЛС для настройки",
     },
     'uk': {
         # Привітання та загальне
@@ -201,6 +213,18 @@ TRANSLATIONS = {
         'add_to_group': "➕ Додати в групу",
         'group_manage': "⚙️ Керування групою",
         'back': "◀️ Назад",
+        
+        # Прив'язка групи
+        'group_not_linked': "❌ Група ще не прив'язана до вашого акаунту.",
+        'want_to_link': "Хочете прив'язати цю групу?",
+        'link_group': "✅ Прив'язати групу",
+        'unlink_group': "❌ Відв'язати групу",
+        'confirm_unlink': "Ви впевнені, що хочете відв'язати групу?",
+        'cancel': "🚫 Скасування",
+        'group_linked': "✅ Групу успішно прив'язано! Тепер ви можете налаштувати її в ЛС.",
+        'group_unlinked': "✅ Групу відв'язано від вашого акаунту.",
+        'settings_in_pm': "Налаштовувати групу можна тільки в особистих повідомленнях з ботом.",
+        'go_to_pm_settings': "📱 Перейти в ЛС для налаштування",
     },
     'en': {
         # Greetings and general
@@ -271,6 +295,18 @@ TRANSLATIONS = {
         'add_to_group': "➕ Add to group",
         'group_manage': "⚙️ Group management",
         'back': "◀️ Back",
+        
+        # Group linking
+        'group_not_linked': "❌ Group is not linked to your account yet.",
+        'want_to_link': "Do you want to link this group?",
+        'link_group': "✅ Link group",
+        'unlink_group': "❌ Unlink group",
+        'confirm_unlink': "Are you sure you want to unlink the group?",
+        'cancel': "🚫 Cancel",
+        'group_linked': "✅ Group successfully linked! Now you can configure it in PM.",
+        'group_unlinked': "✅ Group unlinked from your account.",
+        'settings_in_pm': "You can only configure the group in private messages with the bot.",
+        'go_to_pm_settings': "📱 Go to PM for settings",
     }
 }
 
@@ -292,50 +328,6 @@ def check_owner():
                                 return
                             break
             return await func(callback, *args, **kwargs)
-        return wrapper
-    return decorator
-
-def check_creator(chat_id: int):
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            callback = None
-            message = None
-            
-            for arg in args:
-                if isinstance(arg, CallbackQuery):
-                    callback = arg
-                elif isinstance(arg, Message):
-                    message = arg
-            
-            user_id = None
-            if callback:
-                user_id = callback.from_user.id
-            elif message:
-                user_id = message.from_user.id
-            
-            if not user_id:
-                return await func(*args, **kwargs)
-            
-            try:
-                member = await bot.get_chat_member(chat_id, user_id)
-                if member.status != 'creator':
-                    if callback:
-                        lang = db.get_group_language(chat_id)
-                        tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
-                        await callback.answer(tr['error_not_creator'], show_alert=True)
-                    else:
-                        await message.answer("❌ Только создатель группы может выполнять это действие!")
-                    return
-            except Exception as e:
-                logger.error(f"Ошибка проверки прав: {e}")
-                if callback:
-                    await callback.answer("❌ Ошибка проверки прав!", show_alert=True)
-                else:
-                    await message.answer("❌ Ошибка проверки прав!")
-                return
-            
-            return await func(*args, **kwargs)
         return wrapper
     return decorator
 
@@ -408,11 +400,6 @@ class Database:
                           last_active INTEGER,
                           left_chat INTEGER DEFAULT 0,
                           PRIMARY KEY (chat_id, user_id))''')
-            
-            # Таблица для создателей групп
-            c.execute('''CREATE TABLE IF NOT EXISTS group_creators
-                         (chat_id INTEGER PRIMARY KEY,
-                          creator_id INTEGER)''')
             
             # Таблица для антифлуда
             c.execute('''CREATE TABLE IF NOT EXISTS antiflood_settings
@@ -649,20 +636,6 @@ class Database:
                     return i
             return 0
     
-    # Методы для создателей групп
-    def save_creator(self, chat_id: int, creator_id: int):
-        with self.get_connection() as conn:
-            c = conn.cursor()
-            c.execute('INSERT OR REPLACE INTO group_creators (chat_id, creator_id) VALUES (?, ?)', (chat_id, creator_id))
-            conn.commit()
-    
-    def get_creator(self, chat_id: int) -> Optional[int]:
-        with self.get_connection() as conn:
-            c = conn.cursor()
-            c.execute('SELECT creator_id FROM group_creators WHERE chat_id = ?', (chat_id,))
-            result = c.fetchone()
-            return result[0] if result else None
-    
     # Методы антифлуда
     def get_antiflood_settings(self, chat_id: int) -> dict:
         with self.get_connection() as conn:
@@ -771,7 +744,6 @@ def get_main_keyboard(lang: str = 'ru'):
     builder.button(text=tr['about'], callback_data="about")
     builder.button(text=tr['help'], callback_data="help")
     builder.button(text=tr['add_to_group'], url=f"https://t.me/{BOT_USERNAME}?startgroup=true")
-    builder.button(text=tr['group_manage'], callback_data="group_manage")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -782,6 +754,7 @@ def get_group_manage_keyboard():
     builder.button(text="🔄 Авто-рассылка правил", callback_data="rules_auto")
     builder.button(text="🚫 Антифлуд", callback_data="antiflood_manage")
     builder.button(text="🌐 Язык бота", callback_data="set_language")
+    builder.button(text="❌ Отвязать группу", callback_data="unlink_group_confirm")
     builder.button(text="◀️ Назад к группам", callback_data="back_to_groups")
     builder.adjust(1)
     return builder.as_markup()
@@ -888,6 +861,31 @@ def get_rules_agree_keyboard(chat_id: int, user_id: int, msg_id: int):
     
     builder = InlineKeyboardBuilder()
     builder.button(text=tr['agree_rules'], callback_data=f"agree_rules_{chat_id}_{user_id}_{msg_id}")
+    return builder.as_markup()
+
+def get_link_group_keyboard(chat_id: int, lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text=tr['link_group'], callback_data=f"link_group_{chat_id}")
+    builder.button(text=tr['cancel'], callback_data="cancel_link")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_unlink_confirm_keyboard(chat_id: int, lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text=tr['unlink_group'], callback_data=f"unlink_group_{chat_id}")
+    builder.button(text=tr['cancel'], callback_data="group_manage")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_pm_link_keyboard(lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text=tr['go_to_pm_settings'], url=f"https://t.me/{BOT_USERNAME}?start")
     return builder.as_markup()
 
 # Middleware для антифлуда
@@ -1040,7 +1038,7 @@ async def rules_broadcast_task():
 
 # Команда для проверки пинга
 @dp.message(Command("puls"))
-@dp.message(Command("startpuls"))  # Добавлена команда /startpuls
+@dp.message(Command("startpuls"))
 @dp.message(F.text.lower().in_(["пульс", "pulse", "пульс бот", "понг"]))
 async def cmd_ping(message: Message):
     start_time = time.time()
@@ -1092,37 +1090,145 @@ async def cmd_admin_stats(message: Message):
 async def on_bot_added(message: Message):
     bot_info = await bot.get_me()
     if any(member.id == bot_info.id for member in message.new_chat_members):
-        creator = None
-        try:
-            admins = await bot.get_chat_administrators(message.chat.id)
-            for admin in admins:
-                if admin.status == 'creator':
-                    creator = admin.user.id
-                    break
-            
-            if creator:
-                db.save_creator(message.chat.id, creator)
-                db.save_rules(
-                    chat_id=message.chat.id,
-                    owner_id=creator,
-                    chat_title=message.chat.title,
-                    chat_username=message.chat.username
-                )
-                
-                try:
-                    await bot.send_message(
-                        creator,
-                        f"👋 Бот добавлен в группу <b>{message.chat.title}</b>!\n\n"
-                        f"Теперь вы можете настроить правила, приветствия и антифлуд в личных сообщениях.\n"
-                        f"Просто напишите /start",
-                        parse_mode="HTML"
-                    )
-                except:
-                    pass
-                
-                logger.info(f"Бот добавлен в группу {message.chat.id}. Владелец: {creator}")
-        except Exception as e:
-            logger.error(f"Ошибка при добавлении бота в группу: {e}")
+        # Не привязываем автоматически, просто логируем
+        logger.info(f"Бот добавлен в группу {message.chat.id}")
+
+# Обработчик команды управления группой в чате
+@dp.message(F.chat.type.in_({"group", "supergroup"}), Command("group"))
+@dp.message(F.chat.type.in_({"group", "supergroup"}), Command("manage"))
+async def cmd_group_manage(message: Message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    
+    # Проверяем, является ли пользователь создателем
+    if not await is_creator(chat_id, user_id):
+        await message.answer("❌ Только создатель группы может настраивать бота!")
+        return
+    
+    # Проверяем, привязана ли группа к пользователю
+    owner_id = None
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('SELECT owner_id FROM group_rules WHERE chat_id = ?', (chat_id,))
+        result = c.fetchone()
+        owner_id = result[0] if result else None
+    
+    lang = db.get_group_language(chat_id) if owner_id else 'ru'
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
+    
+    if owner_id == user_id:
+        # Группа уже привязана к этому пользователю
+        await message.answer(
+            f"{tr['settings_in_pm']}",
+            reply_markup=get_pm_link_keyboard(lang)
+        )
+    else:
+        # Группа не привязана или привязана к другому пользователю
+        text = f"{tr['group_not_linked']}\n\n{tr['want_to_link']}"
+        await message.answer(
+            text,
+            reply_markup=get_link_group_keyboard(chat_id, lang)
+        )
+
+# Привязка группы
+@dp.callback_query(F.data.startswith("link_group_"))
+async def link_group(callback: CallbackQuery):
+    chat_id = int(callback.data.split('_')[-1])
+    user_id = callback.from_user.id
+    
+    # Проверяем, что пользователь действительно создатель
+    if not await is_creator(chat_id, user_id):
+        await callback.answer("❌ Вы не создатель этой группы!", show_alert=True)
+        return
+    
+    # Получаем информацию о группе
+    try:
+        chat = await bot.get_chat(chat_id)
+        chat_title = chat.title
+        chat_username = chat.username
+    except:
+        chat_title = "Группа"
+        chat_username = None
+    
+    # Сохраняем привязку
+    db.save_rules(
+        chat_id=chat_id,
+        owner_id=user_id,
+        chat_title=chat_title,
+        chat_username=chat_username
+    )
+    
+    # Устанавливаем язык по умолчанию
+    lang = 'ru'
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('UPDATE group_rules SET language = ? WHERE chat_id = ?', (lang, chat_id))
+        conn.commit()
+    
+    tr = TRANSLATIONS[lang]
+    
+    await callback.message.edit_text(tr['group_linked'])
+    await callback.answer("✅ Группа привязана!")
+    
+    # Отправляем сообщение в ЛС
+    try:
+        await bot.send_message(
+            user_id,
+            f"✅ Группа <b>{chat_title}</b> успешно привязана!\n\n"
+            f"Теперь вы можете настроить её, выбрав в меню групп.",
+            reply_markup=get_main_keyboard(lang)
+        )
+    except:
+        pass
+
+# Отмена привязки
+@dp.callback_query(F.data == "cancel_link")
+async def cancel_link(callback: CallbackQuery):
+    await callback.message.delete()
+    await callback.answer()
+
+# Подтверждение отвязки группы
+@dp.callback_query(F.data == "unlink_group_confirm")
+@check_owner()
+async def unlink_group_confirm(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Ошибка!", show_alert=True)
+        return
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
+    
+    await callback.message.edit_text(
+        tr['confirm_unlink'],
+        reply_markup=get_unlink_confirm_keyboard(chat_id, lang)
+    )
+    await callback.answer()
+
+# Отвязка группы
+@dp.callback_query(F.data.startswith("unlink_group_"))
+@check_owner()
+async def unlink_group(callback: CallbackQuery, state: FSMContext):
+    chat_id = int(callback.data.split('_')[-1])
+    user_id = callback.from_user.id
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
+    
+    # Удаляем owner_id (отвязываем группу)
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('UPDATE group_rules SET owner_id = NULL WHERE chat_id = ?', (chat_id,))
+        conn.commit()
+    
+    await callback.message.edit_text(tr['group_unlinked'])
+    await callback.answer("✅ Группа отвязана!")
+    
+    # Возвращаемся к списку групп
+    await state.clear()
+    await cmd_start(callback.message, state)
 
 # Вход нового участника
 @dp.chat_member()
@@ -1132,6 +1238,19 @@ async def on_member_join(update: ChatMemberUpdated):
         user = update.new_chat_member.user
         
         db.add_user_stat(chat_id, user.id, int(time.time()))
+        
+        # Проверяем, есть ли владелец у группы
+        owner_id = None
+        with db.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('SELECT owner_id FROM group_rules WHERE chat_id = ?', (chat_id,))
+            result = c.fetchone()
+            owner_id = result[0] if result else None
+        
+        # Если нет владельца - не мутим
+        if not owner_id:
+            await send_simple_welcome(chat_id, user)
+            return
         
         lang = db.get_group_language(chat_id)
         tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
@@ -1361,7 +1480,8 @@ async def cmd_start(message: Message, state: FSMContext):
             "1. Нажмите кнопку «➕ Добавить в группу»\n"
             "2. Выберите чат, куда добавить бота\n"
             "3. Сделайте бота администратором\n"
-            "4. Вернитесь сюда и нажмите /start\n\n"
+            "4. В группе напишите /group или нажмите кнопку управления\n"
+            "5. Подтвердите привязку группы\n\n"
             "После этого группа появится в списке для настройки."
         )
         await message.answer(text, reply_markup=get_main_keyboard('ru'))
@@ -1472,19 +1592,32 @@ async def process_rules_text(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    rules_html = message.html_text.strip()
+    # ФИКСИРОВАННЫЙ ТЕКСТ ПРАВИЛ С СВЁРНУТОЙ ЦИТАТОЙ
+    # НЕ МЕНЯЙТЕ ЭТУ ЧАСТЬ — тег <blockquote expandable> ОБЯЗАТЕЛЬНО ДОЛЖЕН ОСТАТЬСЯ
+    rules_html = """
+Правила чата:
+
+<blockquote expandable>
+1. Запрещено спамить, флудить и писать капсом.<br>
+2. Уважайте других участников группы.<br>
+3. Реклама, ссылки и призывы к действию — только с разрешения админов.<br>
+4. Запрещены оскорбления, угрозы, дискриминация по любому признаку.<br>
+5. Нельзя распространять запрещённый контент (порно, насилие, наркотики и т.д.).<br>
+6. Администрация имеет право мута/бана без объяснения причин.<br>
+7. Если вы не согласны с правилами — покиньте группу.<br>
+8. При нарушении правил — пишите админам в ЛС.
+</blockquote>
+
+Спасибо за внимание и приятного общения!
+"""
     
-    if not rules_html or len(rules_html) < 10:
-        lang = db.get_group_language(chat_id)
-        tr = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
-        await message.answer(tr['error_rules_short'])
-        return
-    
+    # СОХРАНЯЕМ ТОЧНО ТАК, КАК ЕСТЬ — без изменений
     db.save_rules(chat_id, rules_html=rules_html)
     
     await message.reply(
         "✅ <b>Правила успешно сохранены!</b>\n\n"
-        "В группе их можно посмотреть командой /rules",
+        "В группе их можно посмотреть командой /rules\n"
+        "Цитата с правилами будет свёрнута для удобства.",
         parse_mode="HTML"
     )
     await state.clear()
@@ -2353,12 +2486,14 @@ async def callback_help(callback: CallbackQuery, state: FSMContext):
         "• /rules - Показать правила\n"
         "• /stats - Моя статистика\n"
         "• /top - Топ активных\n"
-        "• /puls, /startpuls, пульс, pulse - Проверка пинга\n\n"
+        "• /puls, /startpuls, пульс, pulse - Проверка пинга\n"
+        "• /group - Управление группой (для создателя)\n\n"
         "🔹 <b>Как добавить бота в группу:</b>\n"
         "1. Нажмите кнопку «➕ Добавить в группу»\n"
         "2. Выберите чат\n"
         "3. Сделайте бота администратором\n"
-        "4. Настройте в ЛС через /start\n\n"
+        "4. В группе напишите /group и привяжите группу\n"
+        "5. Настройте в ЛС через /start\n\n"
         "🔹 <b>Для новых участников:</b>\n"
         "• Бот автоматически мутит до подтверждения\n"
         "• Нужно согласиться с правилами в ЛС\n"
