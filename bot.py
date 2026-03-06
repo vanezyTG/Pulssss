@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import time
+import random
+import string
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple, List
 import sqlite3
@@ -29,6 +31,9 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = "8557190026:AAHJ9GdxvUtIy8O0DQAC0bL-E_dLSzwgtgE"  # Замените на ваш токен
 BOT_USERNAME = "PulsOfficialManager_bot"  # Замените на username вашего бота (без @)
 ADMIN_IDS = [6708209142]  # Замените на ID администраторов бота
+
+# Московское время (UTC+3)
+MOSCOW_TZ = timezone(timedelta(hours=3))
 
 # Хранилище для антифлуда
 flood_control = defaultdict(list)
@@ -63,6 +68,23 @@ class AntiFloodStates(StatesGroup):
 class ReportGroupStates(StatesGroup):
     waiting_for_report_group = State()
 
+class AutoResponseStates(StatesGroup):
+    waiting_for_trigger = State()
+    waiting_for_response = State()
+    waiting_for_remove_trigger = State()
+
+class LinksStates(StatesGroup):
+    waiting_for_duration = State()
+    waiting_for_max_mentions = State()
+    waiting_for_mention_window = State()
+
+class ConfirmationStates(StatesGroup):
+    waiting_for_confirmation = State()
+
+# Функция для генерации случайного ID пользователя (9 цифр)
+def generate_user_id() -> str:
+    return ''.join(random.choices(string.digits, k=9))
+
 # Словарь переводов (ОСНОВНОЙ ЯЗЫК - АНГЛИЙСКИЙ)
 TRANSLATIONS = {
     'en': {
@@ -74,6 +96,8 @@ TRANSLATIONS = {
         'joined': "Joined",
         'last_active': "Last active",
         'place_in_top': "Place in top",
+        'user_id': "User ID",
+        'first_seen': "First seen",
         
         # Confirmation
         'confirm_not_bot': "I'm not a bot",
@@ -84,6 +108,7 @@ TRANSLATIONS = {
         'confirmed_not_bot': "✅ {name} confirmed they're not a bot and can now write in the chat.",
         'confirmed_rules': "✅ {name} agreed to the rules and can now write in the chat.",
         'thanks_confirmation': "Thank you for confirmation! You can now write in the chat.",
+        'need_confirm_both': "You need to complete TWO steps:\n1. Confirm you're not a bot\n2. Read and agree to the rules",
         
         # Join messages
         'user_joined': "👋 <b>{name}</b> joined the chat!",
@@ -99,7 +124,7 @@ TRANSLATIONS = {
         'per_week': "Per week",
         'per_month': "Per month",
         'total': "Total",
-        'messages': "msg",
+        'messages': "messages",
         
         # Settings
         'language': "🌐 Bot language",
@@ -128,6 +153,7 @@ TRANSLATIONS = {
         'error_rules_short': "❌ Rules are too short! Send a more meaningful text.",
         'group_only': "❌ This command works only in groups!",
         'pm_only': "❌ This command works only in private messages!",
+        'rules_not_set': "❌ Rules are not set in this chat!",
         
         # Auto broadcast
         'rules_reminder': "📢 Reminder: chat rules",
@@ -155,6 +181,7 @@ TRANSLATIONS = {
         
         # Report group
         'report_group': "📋 Report group",
+        'current_report_group': "📋 Current report group: {group}",
         'set_report_group': "Set report group",
         'report_group_info': "Select a group where violation logs will be sent:",
         'report_group_set': "✅ Report group set successfully!",
@@ -165,12 +192,73 @@ TRANSLATIONS = {
         'punishment': "Punishment",
         'message_link': "🔗 Go to message",
         'time': "Time",
+        'violations_list': "📋 Recent violations",
+        'no_violations': "No violations recorded yet.",
         
         # Profile
         'profile_info': "👤 User Profile",
         'messages_count': "Messages",
         'profile_stats': "Statistics for {name}:",
         'reply_to_user': "Reply to a user's message with /profile to see their stats",
+        
+        # Auto responder
+        'auto_responder': "🤖 Auto responder",
+        'auto_responder_empty': "Auto responder is empty.\nAdd your first keyword and response.",
+        'auto_responder_list': "🤖 Auto responder:\n\n",
+        'add_trigger': "➕ Add trigger",
+        'remove_trigger': "🗑 Remove trigger",
+        'enter_trigger': "Enter the keyword (trigger):",
+        'enter_response': "Enter the response text:",
+        'trigger_added': "✅ Trigger '{trigger}' added successfully!",
+        'trigger_removed': "✅ Trigger '{trigger}' removed successfully!",
+        'select_trigger_to_remove': "Select a trigger to remove:",
+        'trigger_exists': "❌ Trigger '{trigger}' already exists!",
+        
+        # Report system
+        'report_button': "🚨 Report",
+        'new_report': "🚨 New Report",
+        'report_from': "From",
+        'report_on': "On",
+        'report_message': "Message",
+        'report_reason': "Reason",
+        'report_closed': "✅ Closed by {admin}",
+        'close_report': "✅ Close",
+        'report_closed_success': "Report closed successfully!",
+        'report_sent': "Report sent to admins",
+        'no_report_group': "Report group not configured",
+        'enter_report_reason': "Please enter the reason for the report:",
+        'reason_required': "Reason is required!",
+        
+        # Links and mentions
+        'links_mentions': "🔗 Links and mentions",
+        'links_enabled': "Link filter: {status}",
+        'mentions_enabled': "Mention filter: {status}",
+        'links_punish': "Punishment: {punish}",
+        'max_mentions': "Max mentions: {count} per {window} sec",
+        'toggle_links': "Toggle link filter",
+        'toggle_mentions': "Toggle mention filter",
+        'set_links_punish': "Set link punishment",
+        'set_mentions_punish': "Set mention punishment",
+        'set_max_mentions': "Set max mentions",
+        'set_mention_window': "Set mention window",
+        'choose_punish': "Choose punishment:",
+        'enter_duration': "Enter duration in minutes (0 = forever):",
+        'enter_max_mentions': "Enter max mentions per minute:",
+        'enter_mention_window': "Enter mention window in seconds:",
+        'punish_set': "✅ Punishment set to {punish}",
+        'max_mentions_set': "✅ Max mentions set to {count}",
+        'mention_window_set': "✅ Mention window set to {window} sec",
+        'filter_enabled': "✅ Filter enabled",
+        'filter_disabled': "❌ Filter disabled",
+        
+        # Confirmation settings
+        'confirmation_settings': "✅ Confirmation settings",
+        'confirmation_type': "Confirmation type: {type}",
+        'not_bot_only': "🤖 Not bot only",
+        'rules_only': "📜 Rules only",
+        'both_steps': "2️⃣ Both steps",
+        'set_confirmation_type': "Set confirmation type",
+        'confirmation_updated': "✅ Confirmation settings updated!",
     },
     'ru': {
         # Приветствия и общее
@@ -181,6 +269,8 @@ TRANSLATIONS = {
         'joined': "Вошёл",
         'last_active': "Последняя активность",
         'place_in_top': "Место в топе",
+        'user_id': "ID пользователя",
+        'first_seen': "Впервые замечен",
         
         # Подтверждение
         'confirm_not_bot': "Я не бот",
@@ -191,6 +281,7 @@ TRANSLATIONS = {
         'confirmed_not_bot': "✅ {name} подтвердил, что не бот и теперь может писать в чат.",
         'confirmed_rules': "✅ {name} согласился с правилами и теперь может писать в чат.",
         'thanks_confirmation': "Спасибо за подтверждение! Теперь вы можете писать в чат.",
+        'need_confirm_both': "Вам нужно выполнить ДВА шага:\n1. Подтвердить, что вы не бот\n2. Прочитать и согласиться с правилами",
         
         # Сообщения при входе
         'user_joined': "👋 <b>{name}</b> зашёл в чат!",
@@ -206,7 +297,7 @@ TRANSLATIONS = {
         'per_week': "За неделю",
         'per_month': "За месяц",
         'total': "Всего",
-        'messages': "сообщ.",
+        'messages': "сообщений",
         
         # Настройки
         'language': "🌐 Язык бота",
@@ -235,6 +326,7 @@ TRANSLATIONS = {
         'error_rules_short': "❌ Правила слишком короткие! Отправьте более содержательный текст.",
         'group_only': "❌ Эта команда работает только в группах!",
         'pm_only': "❌ Эта команда работает только в личных сообщениях!",
+        'rules_not_set': "❌ В этом чате не установлены правила!",
         
         # Авто-рассылка
         'rules_reminder': "📢 Напоминание правил чата",
@@ -262,6 +354,7 @@ TRANSLATIONS = {
         
         # Report group
         'report_group': "📋 Группа репортов",
+        'current_report_group': "📋 Текущая группа репортов: {group}",
         'set_report_group': "Установить группу репортов",
         'report_group_info': "Выберите группу, куда будут отправляться логи нарушений:",
         'report_group_set': "✅ Группа репортов успешно установлена!",
@@ -272,12 +365,73 @@ TRANSLATIONS = {
         'punishment': "Наказание",
         'message_link': "🔗 Перейти к сообщению",
         'time': "Время",
+        'violations_list': "📋 Последние нарушения",
+        'no_violations': "Нарушений пока нет.",
         
         # Profile
         'profile_info': "👤 Профиль пользователя",
         'messages_count': "Сообщений",
         'profile_stats': "Статистика для {name}:",
         'reply_to_user': "Ответьте на сообщение пользователя командой /profile чтобы увидеть его статистику",
+        
+        # Auto responder
+        'auto_responder': "🤖 Автоответчик",
+        'auto_responder_empty': "Автоответчик пуст.\nДобавьте первое ключевое слово и ответ.",
+        'auto_responder_list': "🤖 Автоответчик:\n\n",
+        'add_trigger': "➕ Добавить триггер",
+        'remove_trigger': "🗑 Удалить триггер",
+        'enter_trigger': "Введите ключевое слово (триггер):",
+        'enter_response': "Введите текст ответа:",
+        'trigger_added': "✅ Триггер '{trigger}' успешно добавлен!",
+        'trigger_removed': "✅ Триггер '{trigger}' успешно удалён!",
+        'select_trigger_to_remove': "Выберите триггер для удаления:",
+        'trigger_exists': "❌ Триггер '{trigger}' уже существует!",
+        
+        # Report system
+        'report_button': "🚨 Пожаловаться",
+        'new_report': "🚨 Новая жалоба",
+        'report_from': "От",
+        'report_on': "На",
+        'report_message': "Сообщение",
+        'report_reason': "Причина",
+        'report_closed': "✅ Закрыто админом {admin}",
+        'close_report': "✅ Закрыть",
+        'report_closed_success': "Жалоба успешно закрыта!",
+        'report_sent': "Жалоба отправлена администраторам",
+        'no_report_group': "Группа репортов не настроена",
+        'enter_report_reason': "Пожалуйста, укажите причину жалобы:",
+        'reason_required': "Причина обязательна!",
+        
+        # Links and mentions
+        'links_mentions': "🔗 Ссылки и упоминания",
+        'links_enabled': "Фильтр ссылок: {status}",
+        'mentions_enabled': "Фильтр упоминаний: {status}",
+        'links_punish': "Наказание: {punish}",
+        'max_mentions': "Макс упоминаний: {count} за {window} сек",
+        'toggle_links': "Вкл/выкл фильтр ссылок",
+        'toggle_mentions': "Вкл/выкл фильтр упоминаний",
+        'set_links_punish': "Установить наказание за ссылки",
+        'set_mentions_punish': "Установить наказание за упоминания",
+        'set_max_mentions': "Установить макс упоминаний",
+        'set_mention_window': "Установить окно упоминаний",
+        'choose_punish': "Выберите наказание:",
+        'enter_duration': "Введите длительность в минутах (0 = навсегда):",
+        'enter_max_mentions': "Введите максимальное количество упоминаний в минуту:",
+        'enter_mention_window': "Введите окно упоминаний в секундах:",
+        'punish_set': "✅ Наказание установлено: {punish}",
+        'max_mentions_set': "✅ Макс упоминаний установлено: {count}",
+        'mention_window_set': "✅ Окно упоминаний установлено: {window} сек",
+        'filter_enabled': "✅ Фильтр включён",
+        'filter_disabled': "❌ Фильтр выключен",
+        
+        # Confirmation settings
+        'confirmation_settings': "✅ Настройки подтверждения",
+        'confirmation_type': "Тип подтверждения: {type}",
+        'not_bot_only': "🤖 Только не бот",
+        'rules_only': "📜 Только правила",
+        'both_steps': "2️⃣ Оба шага",
+        'set_confirmation_type': "Установить тип подтверждения",
+        'confirmation_updated': "✅ Настройки подтверждения обновлены!",
     },
     'uk': {
         # Привітання та загальне
@@ -288,6 +442,8 @@ TRANSLATIONS = {
         'joined': "Увійшов",
         'last_active': "Остання активність",
         'place_in_top': "Місце в топі",
+        'user_id': "ID користувача",
+        'first_seen': "Вперше помічений",
         
         # Підтвердження
         'confirm_not_bot': "Я не бот",
@@ -298,6 +454,7 @@ TRANSLATIONS = {
         'confirmed_not_bot': "✅ {name} підтвердив, що не бот і тепер може писати в чат.",
         'confirmed_rules': "✅ {name} погодився з правилами і тепер може писати в чат.",
         'thanks_confirmation': "Дякую за підтвердження! Тепер ви можете писати в чат.",
+        'need_confirm_both': "Вам потрібно виконати ДВА кроки:\n1. Підтвердити, що ви не бот\n2. Прочитати та погодитися з правилами",
         
         # Повідомлення при вході
         'user_joined': "👋 <b>{name}</b> зайшов у чат!",
@@ -313,7 +470,7 @@ TRANSLATIONS = {
         'per_week': "За тиждень",
         'per_month': "За місяць",
         'total': "Всього",
-        'messages': "повідом.",
+        'messages': "повідомлень",
         
         # Налаштування
         'language': "🌐 Мова бота",
@@ -342,6 +499,7 @@ TRANSLATIONS = {
         'error_rules_short': "❌ Правила занадто короткі! Відправте більш змістовний текст.",
         'group_only': "❌ Ця команда працює тільки в групах!",
         'pm_only': "❌ Ця команда працює тільки в особистих повідомленнях!",
+        'rules_not_set': "❌ У цьому чаті не встановлені правила!",
         
         # Авторозсилка
         'rules_reminder': "📢 Нагадування правил чату",
@@ -369,6 +527,7 @@ TRANSLATIONS = {
         
         # Report group
         'report_group': "📋 Група репортів",
+        'current_report_group': "📋 Поточна група репортів: {group}",
         'set_report_group': "Встановити групу репортів",
         'report_group_info': "Виберіть групу, куди будуть надсилатися логи порушень:",
         'report_group_set': "✅ Групу репортів успішно встановлено!",
@@ -379,12 +538,73 @@ TRANSLATIONS = {
         'punishment': "Покарання",
         'message_link': "🔗 Перейти до повідомлення",
         'time': "Час",
+        'violations_list': "📋 Останні порушення",
+        'no_violations': "Порушень поки що немає.",
         
         # Profile
         'profile_info': "👤 Профіль користувача",
         'messages_count': "Повідомлень",
         'profile_stats': "Статистика для {name}:",
         'reply_to_user': "Дайте відповідь на повідомлення користувача командою /profile щоб побачити його статистику",
+        
+        # Auto responder
+        'auto_responder': "🤖 Автовідповідач",
+        'auto_responder_empty': "Автовідповідач порожній.\nДодайте перше ключове слово та відповідь.",
+        'auto_responder_list': "🤖 Автовідповідач:\n\n",
+        'add_trigger': "➕ Додати тригер",
+        'remove_trigger': "🗑 Видалити тригер",
+        'enter_trigger': "Введіть ключове слово (тригер):",
+        'enter_response': "Введіть текст відповіді:",
+        'trigger_added': "✅ Тригер '{trigger}' успішно додано!",
+        'trigger_removed': "✅ Тригер '{trigger}' успішно видалено!",
+        'select_trigger_to_remove': "Виберіть тригер для видалення:",
+        'trigger_exists': "❌ Тригер '{trigger}' вже існує!",
+        
+        # Report system
+        'report_button': "🚨 Поскаржитися",
+        'new_report': "🚨 Нова скарга",
+        'report_from': "Від",
+        'report_on': "На",
+        'report_message': "Повідомлення",
+        'report_reason': "Причина",
+        'report_closed': "✅ Закрито адміном {admin}",
+        'close_report': "✅ Закрити",
+        'report_closed_success': "Скаргу успішно закрито!",
+        'report_sent': "Скаргу надіслано адміністраторам",
+        'no_report_group': "Групу репортів не налаштовано",
+        'enter_report_reason': "Будь ласка, вкажіть причину скарги:",
+        'reason_required': "Причина обов'язкова!",
+        
+        # Links and mentions
+        'links_mentions': "🔗 Посилання та згадування",
+        'links_enabled': "Фільтр посилань: {status}",
+        'mentions_enabled': "Фільтр згадувань: {status}",
+        'links_punish': "Покарання: {punish}",
+        'max_mentions': "Макс згадувань: {count} за {window} сек",
+        'toggle_links': "Вкл/викл фільтр посилань",
+        'toggle_mentions': "Вкл/викл фільтр згадувань",
+        'set_links_punish': "Встановити покарання за посилання",
+        'set_mentions_punish': "Встановити покарання за згадування",
+        'set_max_mentions': "Встановити макс згадувань",
+        'set_mention_window': "Встановити вікно згадувань",
+        'choose_punish': "Виберіть покарання:",
+        'enter_duration': "Введіть тривалість у хвилинах (0 = назавжди):",
+        'enter_max_mentions': "Введіть максимальну кількість згадувань за хвилину:",
+        'enter_mention_window': "Введіть вікно згадувань у секундах:",
+        'punish_set': "✅ Покарання встановлено: {punish}",
+        'max_mentions_set': "✅ Макс згадувань встановлено: {count}",
+        'mention_window_set': "✅ Вікно згадувань встановлено: {window} сек",
+        'filter_enabled': "✅ Фільтр увімкнено",
+        'filter_disabled': "❌ Фільтр вимкнено",
+        
+        # Confirmation settings
+        'confirmation_settings': "✅ Налаштування підтвердження",
+        'confirmation_type': "Тип підтвердження: {type}",
+        'not_bot_only': "🤖 Тільки не бот",
+        'rules_only': "📜 Тільки правила",
+        'both_steps': "2️⃣ Обидва кроки",
+        'set_confirmation_type': "Встановити тип підтвердження",
+        'confirmation_updated': "✅ Налаштування підтвердження оновлено!",
     }
 }
 
@@ -485,7 +705,8 @@ class Database:
                           last_rules_time INTEGER,
                           chat_title TEXT,
                           chat_username TEXT,
-                          report_group_id INTEGER)''')
+                          report_group_id INTEGER,
+                          confirmation_type TEXT DEFAULT 'both')''')
             
             # Добавляем поле language, если его нет
             try:
@@ -499,11 +720,41 @@ class Database:
             except sqlite3.OperationalError:
                 pass  # колонка уже есть
             
+            # Добавляем поле confirmation_type, если его нет
+            try:
+                c.execute('ALTER TABLE group_rules ADD COLUMN confirmation_type TEXT DEFAULT "both"')
+            except sqlite3.OperationalError:
+                pass  # колонка уже есть
+            
+            # Индекс для правил
+            try:
+                c.execute('CREATE INDEX IF NOT EXISTS idx_rules_enabled ON group_rules (rules_enabled)')
+            except:
+                pass
+            
+            # Таблица для глобальных пользователей
+            c.execute('''CREATE TABLE IF NOT EXISTS global_users
+                         (user_id INTEGER PRIMARY KEY,
+                          global_id TEXT UNIQUE,
+                          first_seen INTEGER,
+                          username TEXT,
+                          full_name TEXT)''')
+            
+            # Таблица для автоответчика
+            c.execute('''CREATE TABLE IF NOT EXISTS auto_responses
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          chat_id INTEGER,
+                          trigger TEXT,
+                          response TEXT,
+                          created_at INTEGER)''')
+            
             # Таблица для согласившихся с правилами
             c.execute('''CREATE TABLE IF NOT EXISTS rules_agreed
                          (chat_id INTEGER,
                           user_id INTEGER,
                           agreed_at INTEGER,
+                          not_bot_confirmed INTEGER DEFAULT 0,
+                          rules_confirmed INTEGER DEFAULT 0,
                           PRIMARY KEY (chat_id, user_id))''')
             
             # Таблица для статистики пользователей
@@ -529,7 +780,12 @@ class Database:
                           first_punish TEXT DEFAULT 'mute',
                           first_duration INTEGER DEFAULT 60,
                           repeat_punish TEXT DEFAULT 'mute',
-                          repeat_duration INTEGER DEFAULT 300)''')
+                          repeat_duration INTEGER DEFAULT 300,
+                          links_enabled INTEGER DEFAULT 0,
+                          links_punish TEXT DEFAULT 'mute',
+                          links_duration INTEGER DEFAULT 3600,
+                          max_mentions INTEGER DEFAULT 3,
+                          mention_window INTEGER DEFAULT 60)''')
             
             # Таблица для логов нарушений
             c.execute('''CREATE TABLE IF NOT EXISTS violation_logs
@@ -543,6 +799,53 @@ class Database:
                           message_link TEXT,
                           timestamp INTEGER)''')
             
+            conn.commit()
+    
+    # Методы для глобальных пользователей
+    def get_or_create_global_user(self, user_id: int, username: str, full_name: str) -> str:
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('SELECT global_id FROM global_users WHERE user_id = ?', (user_id,))
+            result = c.fetchone()
+            
+            if result:
+                return result[0]
+            
+            # Создаем нового пользователя
+            global_id = generate_user_id()
+            c.execute('''INSERT INTO global_users 
+                         (user_id, global_id, first_seen, username, full_name) 
+                         VALUES (?, ?, ?, ?, ?)''',
+                      (user_id, global_id, int(time.time()), username, full_name))
+            conn.commit()
+            return global_id
+    
+    def get_global_user(self, user_id: int) -> Optional[dict]:
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('SELECT global_id, first_seen, username, full_name FROM global_users WHERE user_id = ?', (user_id,))
+            result = c.fetchone()
+            if result:
+                return {
+                    'global_id': result[0],
+                    'first_seen': result[1],
+                    'username': result[2],
+                    'full_name': result[3]
+                }
+            return None
+    
+    # Методы для настроек подтверждения
+    def get_confirmation_type(self, chat_id: int) -> str:
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('SELECT confirmation_type FROM group_rules WHERE chat_id = ?', (chat_id,))
+            result = c.fetchone()
+            return result[0] if result else 'both'
+    
+    def set_confirmation_type(self, chat_id: int, conf_type: str):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('UPDATE group_rules SET confirmation_type = ? WHERE chat_id = ?', (conf_type, chat_id))
             conn.commit()
     
     def save_rules(self, chat_id: int, rules_html: str = None, owner_id: int = None, 
@@ -576,9 +879,9 @@ class Database:
                     c.execute(query, params)
             else:
                 c.execute('''INSERT INTO group_rules 
-                             (chat_id, owner_id, rules_html, chat_title, chat_username) 
-                             VALUES (?, ?, ?, ?, ?)''', 
-                             (chat_id, owner_id, rules_html, chat_title, chat_username))
+                             (chat_id, owner_id, rules_html, chat_title, chat_username, confirmation_type) 
+                             VALUES (?, ?, ?, ?, ?, ?)''', 
+                             (chat_id, owner_id, rules_html, chat_title, chat_username, 'both'))
             
             conn.commit()
     
@@ -688,31 +991,97 @@ class Database:
             result = c.fetchone()
             return result[0] if result else None
     
-    # Методы для логов нарушений
-    def log_violation(self, chat_id: int, user_id: int, user_name: str, reason: str, punishment: str, message_id: int, message_link: str):
+    def get_report_group_name(self, chat_id: int) -> Optional[str]:
+        report_group_id = self.get_report_group(chat_id)
+        if not report_group_id:
+            return None
+        
         with self.get_connection() as conn:
             c = conn.cursor()
-            c.execute('''INSERT INTO violation_logs 
-                         (chat_id, user_id, user_name, reason, punishment, message_id, message_link, timestamp) 
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (chat_id, user_id, user_name, reason, punishment, message_id, message_link, int(time.time())))
+            c.execute('SELECT chat_title FROM group_rules WHERE chat_id = ?', (report_group_id,))
+            result = c.fetchone()
+            return result[0] if result else f"Group {report_group_id}"
+    
+    # Методы для автоответчика
+    def add_auto_response(self, chat_id: int, trigger: str, response: str):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('''INSERT INTO auto_responses 
+                         (chat_id, trigger, response, created_at) 
+                         VALUES (?, ?, ?, ?)''', 
+                      (chat_id, trigger.lower(), response, int(time.time())))
+            conn.commit()
+    
+    def get_auto_responses(self, chat_id: int) -> List[Tuple[str, str]]:
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('SELECT trigger, response FROM auto_responses WHERE chat_id = ?', (chat_id,))
+            return c.fetchall()
+    
+    def remove_auto_response(self, chat_id: int, trigger: str):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('DELETE FROM auto_responses WHERE chat_id = ? AND trigger = ?', (chat_id, trigger.lower()))
             conn.commit()
     
     # Методы для согласия с правилами
-    def mark_user_confirmed(self, chat_id: int, user_id: int, agreed: bool = True):
+    def mark_user_confirmed(self, chat_id: int, user_id: int, not_bot: bool = False, rules: bool = False):
         with self.get_connection() as conn:
             c = conn.cursor()
-            value = int(time.time()) if agreed else -1
-            c.execute('INSERT OR REPLACE INTO rules_agreed (chat_id, user_id, agreed_at) VALUES (?, ?, ?)',
-                      (chat_id, user_id, value))
+            
+            # Проверяем, есть ли запись
+            c.execute('SELECT not_bot_confirmed, rules_confirmed FROM rules_agreed WHERE chat_id = ? AND user_id = ?', 
+                     (chat_id, user_id))
+            result = c.fetchone()
+            
+            if result:
+                not_bot_confirmed = result[0] or not_bot
+                rules_confirmed = result[1] or rules
+                c.execute('''UPDATE rules_agreed 
+                             SET not_bot_confirmed = ?, rules_confirmed = ?, agreed_at = ? 
+                             WHERE chat_id = ? AND user_id = ?''',
+                         (1 if not_bot_confirmed else 0, 1 if rules_confirmed else 0, int(time.time()), chat_id, user_id))
+            else:
+                c.execute('''INSERT INTO rules_agreed 
+                             (chat_id, user_id, agreed_at, not_bot_confirmed, rules_confirmed) 
+                             VALUES (?, ?, ?, ?, ?)''',
+                         (chat_id, user_id, int(time.time()), 1 if not_bot else 0, 1 if rules else 0))
+            
             conn.commit()
     
-    def has_user_confirmed(self, chat_id: int, user_id: int) -> bool:
+    def has_user_confirmed(self, chat_id: int, user_id: int, conf_type: str = None) -> bool:
+        if conf_type is None:
+            conf_type = self.get_confirmation_type(chat_id)
+        
         with self.get_connection() as conn:
             c = conn.cursor()
-            c.execute('SELECT agreed_at FROM rules_agreed WHERE chat_id = ? AND user_id = ?', (chat_id, user_id))
+            c.execute('SELECT not_bot_confirmed, rules_confirmed FROM rules_agreed WHERE chat_id = ? AND user_id = ?', 
+                     (chat_id, user_id))
             result = c.fetchone()
-            return result and result[0] > 0 if result else False
+            
+            if not result:
+                return False
+            
+            not_bot_confirmed, rules_confirmed = result
+            
+            if conf_type == 'not_bot':
+                return bool(not_bot_confirmed)
+            elif conf_type == 'rules':
+                return bool(rules_confirmed)
+            else:  # 'both'
+                return bool(not_bot_confirmed) and bool(rules_confirmed)
+    
+    def get_user_confirmation_status(self, chat_id: int, user_id: int) -> Tuple[bool, bool]:
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('SELECT not_bot_confirmed, rules_confirmed FROM rules_agreed WHERE chat_id = ? AND user_id = ?', 
+                     (chat_id, user_id))
+            result = c.fetchone()
+            
+            if not result:
+                return (False, False)
+            
+            return (bool(result[0]), bool(result[1]))
     
     # Методы для статистики
     def add_user_stat(self, chat_id: int, user_id: int, join_date: int):
@@ -790,12 +1159,13 @@ class Database:
                     return i
             return 0
     
-    # Методы антифлуда
+    # Методы для антифлуда
     def get_antiflood_settings(self, chat_id: int) -> dict:
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute('''SELECT enabled, msg_limit, time_window, warn_count, 
-                                first_punish, first_duration, repeat_punish, repeat_duration 
+                                first_punish, first_duration, repeat_punish, repeat_duration,
+                                links_enabled, links_punish, links_duration, max_mentions, mention_window
                          FROM antiflood_settings WHERE chat_id = ?''', (chat_id,))
             row = c.fetchone()
             if row:
@@ -807,7 +1177,12 @@ class Database:
                     'first_punish': row[4] or 'mute',
                     'first_duration': row[5] or 60,
                     'repeat_punish': row[6] or 'mute',
-                    'repeat_duration': row[7] or 300
+                    'repeat_duration': row[7] or 300,
+                    'links_enabled': bool(row[8]),
+                    'links_punish': row[9] or 'mute',
+                    'links_duration': row[10] or 3600,
+                    'max_mentions': row[11] or 3,
+                    'mention_window': row[12] or 60
                 }
             return {
                 'enabled': False,
@@ -817,7 +1192,12 @@ class Database:
                 'first_punish': 'mute',
                 'first_duration': 60,
                 'repeat_punish': 'mute',
-                'repeat_duration': 300
+                'repeat_duration': 300,
+                'links_enabled': False,
+                'links_punish': 'mute',
+                'links_duration': 3600,
+                'max_mentions': 3,
+                'mention_window': 60
             }
     
     def set_antiflood_enabled(self, chat_id: int, enabled: bool):
@@ -847,18 +1227,45 @@ class Database:
                     'first_punish': 'mute',
                     'first_duration': 60,
                     'repeat_punish': 'mute',
-                    'repeat_duration': 300
+                    'repeat_duration': 300,
+                    'links_enabled': 0,
+                    'links_punish': 'mute',
+                    'links_duration': 3600,
+                    'max_mentions': 3,
+                    'mention_window': 60
                 }
                 defaults.update(kwargs)
                 c.execute('''INSERT INTO antiflood_settings 
                              (chat_id, enabled, msg_limit, time_window, warn_count, 
-                              first_punish, first_duration, repeat_punish, repeat_duration) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                              first_punish, first_duration, repeat_punish, repeat_duration,
+                              links_enabled, links_punish, links_duration, max_mentions, mention_window) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                           (chat_id, defaults['enabled'], defaults['msg_limit'], 
                            defaults['time_window'], defaults['warn_count'],
                            defaults['first_punish'], defaults['first_duration'],
-                           defaults['repeat_punish'], defaults['repeat_duration']))
+                           defaults['repeat_punish'], defaults['repeat_duration'],
+                           defaults['links_enabled'], defaults['links_punish'],
+                           defaults['links_duration'], defaults['max_mentions'],
+                           defaults['mention_window']))
             conn.commit()
+    
+    # Методы для логов нарушений
+    def log_violation(self, chat_id: int, user_id: int, user_name: str, reason: str, punishment: str, message_id: int, message_link: str):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('''INSERT INTO violation_logs 
+                         (chat_id, user_id, user_name, reason, punishment, message_id, message_link, timestamp) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (chat_id, user_id, user_name, reason, punishment, message_id, message_link, int(time.time())))
+            conn.commit()
+    
+    def get_recent_violations(self, chat_id: int, limit: int = 10) -> List[Tuple]:
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('''SELECT user_name, reason, punishment, timestamp, message_link 
+                         FROM violation_logs WHERE chat_id = ? ORDER BY timestamp DESC LIMIT ?''',
+                      (chat_id, limit))
+            return c.fetchall()
 
 db = Database()
 
@@ -891,7 +1298,11 @@ def format_interval(seconds: int) -> str:
         return f"{seconds // 86400} d"
 
 def get_message_link(chat_id: int, message_id: int) -> str:
-    return f"https://t.me/c/{str(chat_id)[4:]}/{message_id}"
+    # Для супергрупп ID обычно отрицательный и начинается с -100
+    chat_id_str = str(chat_id)
+    if chat_id_str.startswith('-100'):
+        chat_id_str = chat_id_str[4:]
+    return f"https://t.me/c/{chat_id_str}/{message_id}"
 
 # Клавиатуры
 def get_main_keyboard(lang: str = 'en'):
@@ -919,12 +1330,15 @@ def get_group_manage_keyboard(lang: str = 'en'):
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="📝 " + tr['group_manage'], callback_data="manage_rules")
+    builder.button(text="📝 " + tr['rules_reminder'], callback_data="manage_rules")
     builder.button(text="👋 " + tr['welcome'].format(name=""), callback_data="manage_welcome")
     builder.button(text="🔄 " + tr['rules_reminder'], callback_data="rules_auto")
     builder.button(text="🚫 Anti-flood", callback_data="antiflood_manage")
     builder.button(text=tr['group_language'], callback_data="set_language")
     builder.button(text=tr['report_group'], callback_data="set_report_group")
+    builder.button(text=tr['auto_responder'], callback_data="auto_response_manage")
+    builder.button(text=tr['links_mentions'], callback_data="links_manage")
+    builder.button(text=tr['confirmation_settings'], callback_data="confirmation_manage")
     builder.button(text=tr['unlink_group'], callback_data="unlink_group_confirm")
     builder.button(text=tr['back'], callback_data="back_to_groups")
     builder.adjust(1)
@@ -934,7 +1348,7 @@ def get_rules_manage_keyboard(lang: str = 'en'):
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="📝 " + tr['group_manage'], callback_data="set_rules")
+    builder.button(text="📝 " + tr['rules_reminder'], callback_data="set_rules")
     builder.button(text="👁 " + tr['rules_reminder'], callback_data="show_rules")
     builder.button(text=tr['back'], callback_data="group_manage")
     builder.adjust(1)
@@ -946,7 +1360,7 @@ def get_welcome_manage_keyboard(enabled: bool = False, lang: str = 'en'):
     builder = InlineKeyboardBuilder()
     status = "✅ Enabled" if enabled else "❌ Disabled"
     builder.button(text=f"Status: {status}", callback_data="toggle_welcome")
-    builder.button(text="📝 " + tr['group_manage'], callback_data="set_welcome_text")
+    builder.button(text="📝 " + tr['welcome'].format(name=""), callback_data="set_welcome_text")
     builder.button(text="🖼 Set photo", callback_data="set_welcome_photo")
     builder.button(text="👁 View", callback_data="show_welcome")
     builder.button(text=tr['back'], callback_data="group_manage")
@@ -1102,7 +1516,77 @@ def get_report_group_keyboard(groups: List[Tuple[int, str]], lang: str):
     builder.adjust(1)
     return builder.as_markup()
 
-# Middleware для антифлуда
+def get_auto_response_keyboard(responses: List[Tuple[str, str]], lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text=tr['add_trigger'], callback_data="add_auto_trigger")
+    if responses:
+        builder.button(text=tr['remove_trigger'], callback_data="remove_auto_trigger")
+    builder.button(text=tr['back'], callback_data="group_manage")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_auto_response_remove_keyboard(responses: List[Tuple[str, str]], lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    builder = InlineKeyboardBuilder()
+    for trigger, _ in responses:
+        builder.button(text=trigger, callback_data=f"remove_trigger_{trigger}")
+    builder.button(text=tr['back'], callback_data="auto_response_manage")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_links_manage_keyboard(settings: dict, lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    builder = InlineKeyboardBuilder()
+    links_status = "✅" if settings['links_enabled'] else "❌"
+    builder.button(text=f"{tr['links_enabled'].format(status=links_status)}", callback_data="toggle_links")
+    builder.button(text=tr['set_links_punish'], callback_data="set_links_punish")
+    builder.button(text=tr['set_max_mentions'], callback_data="set_max_mentions")
+    builder.button(text=tr['set_mention_window'], callback_data="set_mention_window")
+    builder.button(text=tr['back'], callback_data="group_manage")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_links_punish_keyboard(lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⚠️ Warn", callback_data="links_punish_warn")
+    builder.button(text="🔇 Mute", callback_data="links_punish_mute")
+    builder.button(text="👢 Kick", callback_data="links_punish_kick")
+    builder.button(text="⛔️ Ban", callback_data="links_punish_ban")
+    builder.button(text=tr['back'], callback_data="links_manage")
+    builder.adjust(2)
+    return builder.as_markup()
+
+def get_confirmation_keyboard(current_type: str, lang: str):
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    builder = InlineKeyboardBuilder()
+    
+    not_bot_text = tr['not_bot_only']
+    if current_type == 'not_bot':
+        not_bot_text += " ✅"
+    builder.button(text=not_bot_text, callback_data="confirmation_not_bot")
+    
+    rules_text = tr['rules_only']
+    if current_type == 'rules':
+        rules_text += " ✅"
+    builder.button(text=rules_text, callback_data="confirmation_rules")
+    
+    both_text = tr['both_steps']
+    if current_type == 'both':
+        both_text += " ✅"
+    builder.button(text=both_text, callback_data="confirmation_both")
+    
+    builder.button(text=tr['back'], callback_data="group_manage")
+    builder.adjust(1)
+    return builder.as_markup()
+
+# Middleware для антифлуда и фильтра ссылок
 class AntiFloodMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: Message, data: dict):
         if not isinstance(event, Message) or event.chat.type not in {'group', 'supergroup'}:
@@ -1119,93 +1603,128 @@ class AntiFloodMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         # Проверяем, согласился ли пользователь с правилами
-        if not db.has_user_confirmed(chat_id, user.id):
+        conf_type = db.get_confirmation_type(chat_id)
+        if not db.has_user_confirmed(chat_id, user.id, conf_type):
+            # Если не подтвердил - не обрабатываем флуд
             return await handler(event, data)
 
         settings = db.get_antiflood_settings(chat_id)
-        if not settings['enabled']:
-            return await handler(event, data)
+        
+        # Проверка на флуд
+        if settings['enabled']:
+            now = time.time()
+            key = f"{chat_id}_{user.id}"
+            timestamps = flood_control[key]
 
-        now = time.time()
-        key = f"{chat_id}_{user.id}"
-        timestamps = flood_control[key]
+            timestamps[:] = [t for t in timestamps if now - t < settings['time_window']]
+            timestamps.append(now)
 
-        timestamps[:] = [t for t in timestamps if now - t < settings['time_window']]
-        timestamps.append(now)
+            if len(timestamps) > settings['msg_limit']:
+                violations = len(timestamps) - settings['msg_limit']
 
-        if len(timestamps) > settings['msg_limit']:
-            violations = len(timestamps) - settings['msg_limit']
+                punish_type = settings['first_punish'] if violations <= settings['warn_count'] else settings['repeat_punish']
+                duration = settings['first_duration'] if violations <= settings['warn_count'] else settings['repeat_duration']
 
-            punish_type = settings['first_punish'] if violations <= settings['warn_count'] else settings['repeat_punish']
-            duration = settings['first_duration'] if violations <= settings['warn_count'] else settings['repeat_duration']
+                if punish_type == 'warn':
+                    await event.reply(f"⚠️ {user.full_name}, don't flood! ({violations}/{settings['warn_count']})")
+                else:
+                    await self.apply_punishment(chat_id, user, punish_type, duration, "Flood", event)
+                
+                flood_control[key].clear()
+                return
 
-            if punish_type == 'warn':
-                await event.reply(f"⚠️ {user.full_name}, don't flood! ({violations}/{settings['warn_count']})")
-            else:
-                try:
-                    permissions = ChatPermissions(can_send_messages=False)
-                    until = int(now + duration)
+        # Проверка на ссылки и упоминания
+        if settings['links_enabled'] and event.text:
+            text = event.text.lower()
+            has_external_link = False
+            mention_count = 0
+            
+            if event.entities:
+                for entity in event.entities:
+                    if entity.type == 'url':
+                        url = event.text[entity.offset:entity.offset + entity.length]
+                        # Разрешенные домены (можно расширить)
+                        allowed_domains = ['t.me', 'telegram.me', 'youtube.com', 'youtu.be']
+                        if not any(domain in url for domain in allowed_domains):
+                            has_external_link = True
+                            break
                     
-                    # Получаем язык группы для отчета
-                    lang = db.get_group_language(chat_id)
-                    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-                    
-                    # Создаем ссылку на сообщение
-                    message_link = get_message_link(chat_id, event.message_id)
-                    
-                    # Логируем нарушение
-                    db.log_violation(
-                        chat_id, user.id, user.full_name,
-                        f"Flood ({violations} violations)",
-                        punish_type, event.message_id, message_link
-                    )
-                    
-                    # Отправляем отчет в группу репортов
-                    report_group_id = db.get_report_group(chat_id)
-                    if report_group_id:
-                        try:
-                            report_text = (
-                                f"<b>{tr['violation_report']}</b>\n\n"
-                                f"<b>{tr['user']}:</b> {user.full_name} (@{user.username})\n"
-                                f"<b>ID:</b> <code>{user.id}</code>\n"
-                                f"<b>{tr['reason']}:</b> Flood ({violations} violations)\n"
-                                f"<b>{tr['punishment']}:</b> {punish_type}\n"
-                                f"<b>{tr['time']}:</b> {format_datetime(int(now))}\n\n"
-                                f"<a href='{message_link}'>{tr['message_link']}</a>"
-                            )
-                            await bot.send_message(report_group_id, report_text, parse_mode="HTML")
-                        except:
-                            pass
-                    
-                    if punish_type == 'mute':
-                        await bot.restrict_chat_member(chat_id, user.id, permissions=permissions, until_date=until)
-                        await event.reply(f"🔇 {user.full_name} muted for {duration // 60} min")
-                    elif punish_type == 'kick':
-                        await bot.ban_chat_member(chat_id, user.id)
-                        await bot.unban_chat_member(chat_id, user.id)
-                        await event.reply(f"👢 {user.full_name} kicked for flooding")
-                    elif punish_type == 'ban':
-                        await bot.ban_chat_member(chat_id, user.id, until_date=until)
-                        await event.reply(f"⛔️ {user.full_name} banned for {duration // 60} min")
-                except Exception as e:
-                    logger.warning(f"Error punishing in {chat_id}: {e}")
-
-            flood_control[key].clear()
-            return
+                    if entity.type in ('mention', 'text_mention'):
+                        mention_count += 1
+            
+            if has_external_link:
+                await self.apply_punishment(chat_id, user, settings['links_punish'], settings['links_duration'], "External link", event)
+                return
+            
+            if mention_count > settings['max_mentions']:
+                await self.apply_punishment(chat_id, user, settings['links_punish'], settings['links_duration'], f"Too many mentions ({mention_count})", event)
+                return
 
         return await handler(event, data)
+    
+    async def apply_punishment(self, chat_id: int, user: types.User, punish_type: str, duration: int, reason: str, event: Message):
+        now = time.time()
+        
+        # Получаем язык группы для отчета
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        
+        # Создаем ссылку на сообщение
+        message_link = get_message_link(chat_id, event.message_id)
+        
+        # Логируем нарушение
+        db.log_violation(
+            chat_id, user.id, user.full_name,
+            reason, punish_type, event.message_id, message_link
+        )
+        
+        # Отправляем отчет в группу репортов
+        report_group_id = db.get_report_group(chat_id)
+        if report_group_id:
+            try:
+                report_text = (
+                    f"<b>{tr['violation_report']}</b>\n\n"
+                    f"<b>{tr['user']}:</b> {user.full_name} (@{user.username})\n"
+                    f"<b>ID:</b> <code>{user.id}</code>\n"
+                    f"<b>{tr['reason']}:</b> {reason}\n"
+                    f"<b>{tr['punishment']}:</b> {punish_type}\n"
+                    f"<b>{tr['time']}:</b> {format_datetime(int(now))}\n\n"
+                    f"<a href='{message_link}'>{tr['message_link']}</a>"
+                )
+                await bot.send_message(report_group_id, report_text, parse_mode="HTML")
+            except:
+                pass
+        
+        try:
+            if punish_type == 'warn':
+                await event.reply(f"⚠️ {user.full_name}, {reason}")
+            elif punish_type == 'mute':
+                permissions = ChatPermissions(can_send_messages=False)
+                until = int(now + duration) if duration > 0 else None
+                await bot.restrict_chat_member(chat_id, user.id, permissions=permissions, until_date=until)
+                await event.reply(f"🔇 {user.full_name} muted for {duration // 60} min")
+            elif punish_type == 'kick':
+                await bot.ban_chat_member(chat_id, user.id)
+                await bot.unban_chat_member(chat_id, user.id)
+                await event.reply(f"👢 {user.full_name} kicked: {reason}")
+            elif punish_type == 'ban':
+                until = int(now + duration) if duration > 0 else None
+                await bot.ban_chat_member(chat_id, user.id, until_date=until)
+                await event.reply(f"⛔️ {user.full_name} banned for {duration // 60} min")
+        except Exception as e:
+            logger.warning(f"Error punishing in {chat_id}: {e}")
 
 # Фоновая задача для сброса счетчиков
 async def reset_periodic_counters():
     global stats_updating
     
     while True:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(MOSCOW_TZ)
         
-        # Начало текущего дня (00:00 UTC)
+        # Начало текущего дня (00:00 MSK)
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Начало текущей недели (понедельник 00:00 UTC)
+        # Начало текущей недели (понедельник 00:00 MSK)
         week_start = now - timedelta(days=now.weekday())
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
         
@@ -1438,7 +1957,6 @@ async def cancel_link(callback: CallbackQuery):
 
 # Правила
 @dp.message(Command("rules"))
-@dp.message(Command("rulesgroup"))
 @group_only()
 async def cmd_rules(message: Message):
     chat_id = message.chat.id
@@ -1447,7 +1965,7 @@ async def cmd_rules(message: Message):
     
     rules_html = db.get_rules_html(chat_id)
     if rules_html:
-        await message.reply(f"<b>📜 {tr['rules_reminder']}</b>\n\n{rules_html}", parse_mode="HTML")
+        await message.reply(f"<b>{tr['rules_reminder']}</b>\n\n{rules_html}", parse_mode="HTML")
     else:
         await message.answer(tr['error_no_rules'])
 
@@ -1506,7 +2024,14 @@ async def cmd_my_stats(message: Message):
     lang = db.get_group_language(chat_id)
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
     
+    # Получаем глобальный ID пользователя
+    global_user = db.get_global_user(user.id)
+    if not global_user:
+        global_id = db.get_or_create_global_user(user.id, user.username or "", user.full_name or "")
+        global_user = db.get_global_user(user.id)
+    
     stat = db.get_user_stat(chat_id, user.id)
+    
     if not stat:
         text = tr['stats_empty']
     else:
@@ -1516,6 +2041,8 @@ async def cmd_my_stats(message: Message):
         
         text = (
             f"<b>{tr['profile'].format(name=user.full_name)}</b>\n\n"
+            f"<b>{tr['user_id']}:</b> <code>{global_user['global_id']}</code>\n"
+            f"<b>{tr['first_seen']}:</b> {format_datetime(global_user['first_seen'])}\n\n"
             f"• {tr['per_day']}: {stat['day_messages']} {tr['messages']}\n"
             f"• {tr['per_week']}: {stat['week_messages']} {tr['messages']}\n"
             f"• {tr['per_month']}: {stat['month_messages']} {tr['messages']}\n"
@@ -1553,7 +2080,14 @@ async def cmd_profile(message: Message):
     
     target_user = message.reply_to_message.from_user
     
+    # Получаем глобальный ID пользователя
+    global_user = db.get_global_user(target_user.id)
+    if not global_user:
+        global_id = db.get_or_create_global_user(target_user.id, target_user.username or "", target_user.full_name or "")
+        global_user = db.get_global_user(target_user.id)
+    
     stat = db.get_user_stat(chat_id, target_user.id)
+    
     if not stat:
         text = tr['stats_empty']
     else:
@@ -1563,6 +2097,8 @@ async def cmd_profile(message: Message):
         
         text = (
             f"<b>{tr['profile'].format(name=target_user.full_name)}</b>\n\n"
+            f"<b>{tr['user_id']}:</b> <code>{global_user['global_id']}</code>\n"
+            f"<b>{tr['first_seen']}:</b> {format_datetime(global_user['first_seen'])}\n\n"
             f"• {tr['per_day']}: {stat['day_messages']} {tr['messages']}\n"
             f"• {tr['per_week']}: {stat['week_messages']} {tr['messages']}\n"
             f"• {tr['per_month']}: {stat['month_messages']} {tr['messages']}\n"
@@ -1580,6 +2116,9 @@ async def on_member_join(update: ChatMemberUpdated):
     if update.new_chat_member.status == "member" and update.old_chat_member.status in ("left", "kicked"):
         chat_id = update.chat.id
         user = update.new_chat_member.user
+        
+        # Добавляем в глобальную таблицу пользователей
+        db.get_or_create_global_user(user.id, user.username or "", user.full_name or "")
         
         db.add_user_stat(chat_id, user.id, int(time.time()))
         
@@ -1599,9 +2138,22 @@ async def on_member_join(update: ChatMemberUpdated):
         lang = db.get_group_language(chat_id)
         tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
 
-        if db.has_user_confirmed(chat_id, user.id):
-            await send_simple_welcome(chat_id, user)
-            return
+        # Проверяем тип подтверждения
+        conf_type = db.get_confirmation_type(chat_id)
+        not_bot_confirmed, rules_confirmed = db.get_user_confirmation_status(chat_id, user.id)
+        
+        if conf_type == 'both':
+            if not_bot_confirmed and rules_confirmed:
+                await send_simple_welcome(chat_id, user)
+                return
+        elif conf_type == 'not_bot':
+            if not_bot_confirmed:
+                await send_simple_welcome(chat_id, user)
+                return
+        elif conf_type == 'rules':
+            if rules_confirmed:
+                await send_simple_welcome(chat_id, user)
+                return
 
         # МУТ НАВСЕГДА
         try:
@@ -1617,16 +2169,40 @@ async def on_member_join(update: ChatMemberUpdated):
         builder = InlineKeyboardBuilder()
         msg_text = ""
 
-        if rules_html:
+        if conf_type == 'both':
             msg_text = (
                 f"{tr['user_joined'].format(name=user.full_name)}\n\n"
-                f"{tr['need_confirm_rules']}"
+                f"{tr['need_confirm_both']}"
             )
+            # Отправляем в ЛС оба шага
+            try:
+                # Шаг 1: Подтверждение не бот
+                msg1 = await bot.send_message(
+                    user.id,
+                    f"Welcome to {update.chat.title}!\n\n"
+                    "Step 1: Confirm you're not a bot",
+                    reply_markup=get_confirm_not_bot_keyboard(chat_id, user.id, 0, lang)
+                )
+                
+                # Шаг 2: Правила (если есть)
+                if rules_html:
+                    await bot.send_message(
+                        user.id,
+                        f"Step 2: Read and agree to the rules:\n\n{rules_html}",
+                        reply_markup=get_rules_agree_keyboard(chat_id, user.id, 0, lang),
+                        parse_mode="HTML"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to send confirmation to PM {user.id}: {e}")
+                await bot.send_message(chat_id, f"Failed to send confirmation to {user.full_name} in PM. Please open PM with the bot.")
+            
+            # Отправляем сообщение в группу с кнопкой
             builder.button(
                 text=tr['go_to_pm'],
                 url=f"https://t.me/{BOT_USERNAME}?start"
             )
-        else:
+            
+        elif conf_type == 'not_bot':
             msg_text = (
                 f"{tr['user_joined'].format(name=user.full_name)}\n\n"
                 f"{tr['need_confirm_not_bot']}"
@@ -1635,10 +2211,15 @@ async def on_member_join(update: ChatMemberUpdated):
                 text=tr['confirm_not_bot'],
                 callback_data=f"confirm_not_bot_{chat_id}_{user.id}_0"
             )
-        
-        msg = await bot.send_message(chat_id, msg_text, reply_markup=builder.as_markup(), parse_mode="HTML")
-
-        if rules_html:
+        elif conf_type == 'rules' and rules_html:
+            msg_text = (
+                f"{tr['user_joined'].format(name=user.full_name)}\n\n"
+                f"{tr['need_confirm_rules']}"
+            )
+            builder.button(
+                text=tr['go_to_pm'],
+                url=f"https://t.me/{BOT_USERNAME}?start"
+            )
             try:
                 await bot.send_message(
                     user.id,
@@ -1646,26 +2227,34 @@ async def on_member_join(update: ChatMemberUpdated):
                     "Please read the rules below and confirm your agreement.\n"
                     "Without this, you won't be able to write in the chat.\n\n"
                     f"<b>Rules:</b>\n\n{rules_html}",
-                    reply_markup=get_rules_agree_keyboard(chat_id, user.id, msg.message_id, lang),
+                    reply_markup=get_rules_agree_keyboard(chat_id, user.id, 0, lang),
                     parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Failed to send rules to PM {user.id}: {e}")
                 await bot.send_message(chat_id, f"Failed to send rules to {user.full_name} in PM. Please open PM with the bot.")
         else:
-            try:
-                await bot.send_message(
-                    user.id,
-                    f"Welcome to {update.chat.title}!\n\n"
-                    "Just confirm in the group that you're not a bot."
-                )
-            except Exception as e:
-                logger.warning(f"Failed to send message to PM {user.id}: {e}")
+            # Если нет правил и тип 'rules' - не мутим
+            await send_simple_welcome(chat_id, user)
+            return
+        
+        if msg_text:
+            msg = await bot.send_message(chat_id, msg_text, reply_markup=builder.as_markup(), parse_mode="HTML")
+            # Сохраняем ID сообщения для будущего редактирования
+            if conf_type == 'both':
+                # Для both шагов нужно будет редактировать после каждого шага
+                pass
 
 # Простое приветствие
 async def send_simple_welcome(chat_id: int, user: types.User):
     lang = db.get_group_language(chat_id)
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    # Получаем глобальный ID пользователя
+    global_user = db.get_global_user(user.id)
+    if not global_user:
+        global_id = db.get_or_create_global_user(user.id, user.username or "", user.full_name or "")
+        global_user = db.get_global_user(user.id)
     
     stat = db.get_user_stat(chat_id, user.id)
     join_dt = format_datetime(stat['join_date']) if stat else format_datetime(time.time())
@@ -1675,6 +2264,8 @@ async def send_simple_welcome(chat_id: int, user: types.User):
     
     text = (
         f"{tr['welcome'].format(name=user.full_name)}\n\n"
+        f"<b>{tr['user_id']}:</b> <code>{global_user['global_id']}</code>\n"
+        f"<b>{tr['first_seen']}:</b> {format_datetime(global_user['first_seen'])}\n\n"
         f"• {tr['username']}: @{user.username or tr['no_username']}\n"
         f"• {tr['id']}: <code>{user.id}</code>\n"
         f"• {tr['joined']}: {join_dt}\n"
@@ -1713,10 +2304,20 @@ async def process_confirm_not_bot(callback: CallbackQuery):
         await callback.answer(tr['error_not_yours'], show_alert=True)
         return
 
-    db.mark_user_confirmed(chat_id, user_id, agreed=False)
+    db.mark_user_confirmed(chat_id, user_id, not_bot=True, rules=False)
     
     lang = db.get_group_language(chat_id)
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    # Проверяем тип подтверждения
+    conf_type = db.get_confirmation_type(chat_id)
+    not_bot_confirmed, rules_confirmed = db.get_user_confirmation_status(chat_id, user_id)
+    
+    # Если тип both и правила еще не подтверждены - не снимаем мут
+    if conf_type == 'both' and not rules_confirmed:
+        await callback.message.edit_text("✅ Step 1 completed! Now complete step 2: agree to the rules.")
+        await callback.answer("Step 1 completed!")
+        return
 
     # Снимаем мут
     try:
@@ -1757,10 +2358,20 @@ async def process_agree_rules(callback: CallbackQuery):
         await callback.answer(tr['error_not_yours'], show_alert=True)
         return
 
-    db.mark_user_confirmed(chat_id, user_id, agreed=True)
+    db.mark_user_confirmed(chat_id, user_id, not_bot=False, rules=True)
     
     lang = db.get_group_language(chat_id)
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    # Проверяем тип подтверждения
+    conf_type = db.get_confirmation_type(chat_id)
+    not_bot_confirmed, rules_confirmed = db.get_user_confirmation_status(chat_id, user_id)
+    
+    # Если тип both и not bot еще не подтвержден - не снимаем мут
+    if conf_type == 'both' and not not_bot_confirmed:
+        await callback.message.edit_text("✅ Step 2 completed! Now complete step 1: confirm you're not a bot.")
+        await callback.answer("Step 2 completed!")
+        return
 
     # Снимаем мут
     try:
@@ -1791,8 +2402,13 @@ async def process_agree_rules(callback: CallbackQuery):
 @dp.message(F.chat.type.in_({"group", "supergroup"}))
 async def update_stats(message: Message):
     if not message.from_user.is_bot:
-        if db.has_user_confirmed(message.chat.id, message.from_user.id):
-            db.update_message_count(message.chat.id, message.from_user.id)
+        chat_id = message.chat.id
+        user_id = message.from_user.id
+        
+        # Проверяем, подтвердил ли пользователь
+        conf_type = db.get_confirmation_type(chat_id)
+        if db.has_user_confirmed(chat_id, user_id, conf_type):
+            db.update_message_count(chat_id, user_id)
 
 # Выход из группы
 @dp.chat_member(F.new_chat_member.status == "left")
@@ -2786,8 +3402,13 @@ async def set_report_group(callback: CallbackQuery, state: FSMContext):
     lang = db.get_group_language(chat_id)
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
     
+    current_report_group = db.get_report_group_name(chat_id)
+    text = tr['report_group_info']
+    if current_report_group:
+        text = tr['current_report_group'].format(group=current_report_group) + "\n\n" + text
+    
     await callback.message.edit_text(
-        tr['report_group_info'],
+        text,
         reply_markup=get_report_group_keyboard(groups, lang)
     )
     await callback.answer()
@@ -2829,6 +3450,481 @@ async def remove_report_group(callback: CallbackQuery, state: FSMContext):
     
     await callback.answer(tr['report_group_removed'], show_alert=True)
     await set_report_group(callback, state)
+
+# Автоответчик
+@dp.callback_query(F.data == "auto_response_manage")
+@check_owner()
+async def auto_response_manage(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Select a group first!", show_alert=True)
+        return
+    
+    responses = db.get_auto_responses(chat_id)
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    if not responses:
+        text = tr['auto_responder_empty']
+    else:
+        text = tr['auto_responder_list']
+        for trigger, resp in responses:
+            text += f"• <code>{trigger}</code> → {resp[:50]}{'...' if len(resp) > 50 else ''}\n"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_auto_response_keyboard(responses, lang),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "add_auto_trigger")
+@check_owner()
+async def add_auto_trigger(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if not data.get('selected_chat_id'):
+        await callback.answer("❌ Select a group first!", show_alert=True)
+        return
+    
+    lang = db.get_group_language(data.get('selected_chat_id'))
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.message.edit_text(tr['enter_trigger'])
+    await state.set_state(AutoResponseStates.waiting_for_trigger)
+    await callback.answer()
+
+@dp.message(AutoResponseStates.waiting_for_trigger)
+async def process_auto_trigger(message: Message, state: FSMContext):
+    if message.chat.type != 'private':
+        await message.answer("❌ Settings only in private messages!")
+        await state.clear()
+        return
+    
+    trigger = message.text.strip()
+    if not trigger:
+        await message.answer("❌ Trigger cannot be empty!")
+        return
+    
+    await state.update_data(auto_trigger=trigger)
+    await message.reply("📝 Now send the response text:")
+    await state.set_state(AutoResponseStates.waiting_for_response)
+
+@dp.message(AutoResponseStates.waiting_for_response)
+async def process_auto_response(message: Message, state: FSMContext):
+    if message.chat.type != 'private':
+        await message.answer("❌ Settings only in private messages!")
+        await state.clear()
+        return
+    
+    response = message.html_text.strip()
+    if not response:
+        await message.answer("❌ Response cannot be empty!")
+        return
+    
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    trigger = data.get('auto_trigger')
+    
+    if not chat_id or not trigger:
+        await message.answer("❌ Error! Start over.")
+        await state.clear()
+        return
+    
+    if not await is_creator(chat_id, message.from_user.id):
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        await message.answer(tr['error_not_creator'])
+        await state.clear()
+        return
+    
+    # Проверяем, не существует ли уже такой триггер
+    responses = db.get_auto_responses(chat_id)
+    for t, _ in responses:
+        if t.lower() == trigger.lower():
+            lang = db.get_group_language(chat_id)
+            tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+            await message.answer(tr['trigger_exists'].format(trigger=trigger))
+            await state.clear()
+            return
+    
+    db.add_auto_response(chat_id, trigger, response)
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await message.reply(tr['trigger_added'].format(trigger=trigger))
+    await state.clear()
+
+@dp.callback_query(F.data == "remove_auto_trigger")
+@check_owner()
+async def remove_auto_trigger(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Select a group first!", show_alert=True)
+        return
+    
+    responses = db.get_auto_responses(chat_id)
+    if not responses:
+        await callback.answer("❌ No triggers to remove!", show_alert=True)
+        return
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.message.edit_text(
+        tr['select_trigger_to_remove'],
+        reply_markup=get_auto_response_remove_keyboard(responses, lang)
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("remove_trigger_"))
+@check_owner()
+async def process_remove_trigger(callback: CallbackQuery, state: FSMContext):
+    trigger = callback.data.replace("remove_trigger_", "")
+    
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Error!", show_alert=True)
+        return
+    
+    db.remove_auto_response(chat_id, trigger)
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.answer(tr['trigger_removed'].format(trigger=trigger), show_alert=True)
+    await auto_response_manage(callback, state)
+
+# Автоответчик - обработка сообщений
+@dp.message(F.chat.type.in_({"group", "supergroup"}))
+async def auto_response_handler(message: Message):
+    if message.from_user.is_bot:
+        return
+    
+    chat_id = message.chat.id
+    text = message.text.lower() if message.text else ""
+    
+    if not text:
+        return
+    
+    responses = db.get_auto_responses(chat_id)
+    for trigger, response in responses:
+        if trigger in text:
+            try:
+                await message.reply(response, parse_mode="HTML", disable_notification=True)
+            except Exception as e:
+                logger.warning(f"Auto response error in {chat_id}: {e}")
+            # Отвечаем только на первое совпадение
+            break
+
+# Управление ссылками и упоминаниями
+@dp.callback_query(F.data == "links_manage")
+@check_owner()
+async def links_manage(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Select a group first!", show_alert=True)
+        return
+    
+    settings = db.get_antiflood_settings(chat_id)
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.message.edit_text(
+        f"🔗 <b>{tr['links_mentions']}</b>\n\n"
+        f"{tr['links_enabled'].format(status='✅' if settings['links_enabled'] else '❌')}\n"
+        f"{tr['links_punish'].format(punish=settings['links_punish'].capitalize())}\n"
+        f"{tr['max_mentions'].format(count=settings['max_mentions'], window=settings['mention_window'])}\n\n"
+        f"Choose what to configure:",
+        reply_markup=get_links_manage_keyboard(settings, lang)
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "toggle_links")
+@check_owner()
+async def toggle_links(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Group not selected!", show_alert=True)
+        return
+    
+    settings = db.get_antiflood_settings(chat_id)
+    new_enabled = not settings['links_enabled']
+    
+    db.save_antiflood_settings(chat_id, links_enabled=int(new_enabled))
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    status = tr['filter_enabled'] if new_enabled else tr['filter_disabled']
+    await callback.answer(status, show_alert=True)
+    
+    await links_manage(callback, state)
+
+@dp.callback_query(F.data == "set_links_punish")
+@check_owner()
+async def set_links_punish(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Group not selected!", show_alert=True)
+        return
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.message.edit_text(
+        tr['choose_punish'],
+        reply_markup=get_links_punish_keyboard(lang)
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("links_punish_"))
+@check_owner()
+async def process_links_punish(callback: CallbackQuery, state: FSMContext):
+    punish = callback.data.split('_')[-1]  # warn / mute / kick / ban
+    
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Group not selected!", show_alert=True)
+        return
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    if punish in ['warn', 'kick']:
+        # Для warn и kick время не нужно
+        db.save_antiflood_settings(chat_id, links_punish=punish)
+        await callback.answer(tr['punish_set'].format(punish=punish), show_alert=True)
+        await links_manage(callback, state)
+    else:
+        # Для mute и ban спрашиваем время
+        await state.update_data(links_punish=punish)
+        await callback.message.edit_text(tr['enter_duration'])
+        await state.set_state(LinksStates.waiting_for_duration)
+    
+    await callback.answer()
+
+@dp.message(LinksStates.waiting_for_duration)
+async def process_links_duration(message: Message, state: FSMContext):
+    if message.chat.type != 'private':
+        await message.answer("❌ Settings only in private messages!")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    punish = data.get('links_punish')
+    
+    if not chat_id or not punish:
+        await message.answer("❌ Error! Start over.")
+        await state.clear()
+        return
+    
+    if not await is_creator(chat_id, message.from_user.id):
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        await message.answer(tr['error_not_creator'])
+        await state.clear()
+        return
+    
+    try:
+        minutes = int(message.text)
+        if minutes < 0:
+            await message.answer("❌ Enter a positive number or 0 (forever)")
+            return
+        
+        duration_sec = minutes * 60
+        db.save_antiflood_settings(chat_id, links_punish=punish, links_duration=duration_sec)
+        
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        
+        await message.reply(tr['punish_set'].format(punish=punish))
+        await state.clear()
+        
+        # Возвращаемся в меню
+        await links_manage(message, state)
+    except ValueError:
+        await message.answer("❌ Please enter a number!")
+
+@dp.callback_query(F.data == "set_max_mentions")
+@check_owner()
+async def set_max_mentions(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Group not selected!", show_alert=True)
+        return
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.message.edit_text(tr['enter_max_mentions'])
+    await state.set_state(LinksStates.waiting_for_max_mentions)
+    await callback.answer()
+
+@dp.message(LinksStates.waiting_for_max_mentions)
+async def process_max_mentions(message: Message, state: FSMContext):
+    if message.chat.type != 'private':
+        await message.answer("❌ Settings only in private messages!")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await message.answer("❌ Error! Start over.")
+        await state.clear()
+        return
+    
+    if not await is_creator(chat_id, message.from_user.id):
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        await message.answer(tr['error_not_creator'])
+        await state.clear()
+        return
+    
+    try:
+        count = int(message.text)
+        if count < 1 or count > 20:
+            await message.answer("❌ Max mentions must be from 1 to 20!")
+            return
+        
+        db.save_antiflood_settings(chat_id, max_mentions=count)
+        
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        
+        await message.reply(tr['max_mentions_set'].format(count=count))
+        await state.clear()
+        
+        # Возвращаемся в меню
+        await links_manage(message, state)
+    except ValueError:
+        await message.answer("❌ Please enter a number!")
+
+@dp.callback_query(F.data == "set_mention_window")
+@check_owner()
+async def set_mention_window(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Group not selected!", show_alert=True)
+        return
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.message.edit_text(tr['enter_mention_window'])
+    await state.set_state(LinksStates.waiting_for_mention_window)
+    await callback.answer()
+
+@dp.message(LinksStates.waiting_for_mention_window)
+async def process_mention_window(message: Message, state: FSMContext):
+    if message.chat.type != 'private':
+        await message.answer("❌ Settings only in private messages!")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await message.answer("❌ Error! Start over.")
+        await state.clear()
+        return
+    
+    if not await is_creator(chat_id, message.from_user.id):
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        await message.answer(tr['error_not_creator'])
+        await state.clear()
+        return
+    
+    try:
+        window = int(message.text)
+        if window < 10 or window > 3600:
+            await message.answer("❌ Mention window must be from 10 to 3600 seconds!")
+            return
+        
+        db.save_antiflood_settings(chat_id, mention_window=window)
+        
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+        
+        await message.reply(tr['mention_window_set'].format(window=window))
+        await state.clear()
+        
+        # Возвращаемся в меню
+        await links_manage(message, state)
+    except ValueError:
+        await message.answer("❌ Please enter a number!")
+
+# Настройка типа подтверждения
+@dp.callback_query(F.data == "confirmation_manage")
+@check_owner()
+async def confirmation_manage(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Select a group first!", show_alert=True)
+        return
+    
+    conf_type = db.get_confirmation_type(chat_id)
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    type_names = {
+        'not_bot': tr['not_bot_only'],
+        'rules': tr['rules_only'],
+        'both': tr['both_steps']
+    }
+    
+    await callback.message.edit_text(
+        f"{tr['confirmation_settings']}\n\n"
+        f"{tr['confirmation_type'].format(type=type_names.get(conf_type, conf_type))}\n\n"
+        f"Choose confirmation type:",
+        reply_markup=get_confirmation_keyboard(conf_type, lang)
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("confirmation_"))
+@check_owner()
+async def process_confirmation_type(callback: CallbackQuery, state: FSMContext):
+    conf_type = callback.data.replace("confirmation_", "")
+    
+    data = await state.get_data()
+    chat_id = data.get('selected_chat_id')
+    
+    if not chat_id:
+        await callback.answer("❌ Group not selected!", show_alert=True)
+        return
+    
+    db.set_confirmation_type(chat_id, conf_type)
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    await callback.answer(tr['confirmation_updated'], show_alert=True)
+    await confirmation_manage(callback, state)
 
 # Подтверждение отвязки группы
 @dp.callback_query(F.data == "unlink_group_confirm")
@@ -2914,6 +4010,9 @@ async def callback_about(callback: CallbackQuery, state: FSMContext):
         "• Message statistics (day/week/month/total)\n"
         "• Top active members\n"
         "• Anti-flood with customizable punishments\n"
+        "• Links and mentions filter\n"
+        "• Auto responder with keywords\n"
+        "• Report system with admin buttons\n"
         "• Welcome message with photo/text\n"
         "• Auto rules broadcast\n"
         "• Support for 3 languages (English, Russian, Ukrainian)\n"
