@@ -29,8 +29,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # Замените на ваш токен
-BOT_USERNAME = "YOUR_BOT_USERNAME"  # Замените на username вашего бота (без @)
+BOT_TOKEN = "8557190026:AAENDFgMgIPPUFxhBoxYBr1k-R8et0rL-P8"  # Замените на ваш токен
+BOT_USERNAME = "PulsOfficialManager_bot"  # Замените на username вашего бота (без @)
 ADMIN_IDS = [6708209142]  # Замените на ID администраторов бота
 
 # Московское время (UTC+3)
