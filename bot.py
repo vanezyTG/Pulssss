@@ -105,36 +105,6 @@ def check_owner():
         return wrapper
     return decorator
 
-def group_only():
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(message: Message, *args, **kwargs):
-            if message.chat.type == 'private':
-                # Получаем язык пользователя
-                user_id = message.from_user.id
-                lang = user_languages.get(user_id, 'en')
-                tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-                await message.answer(tr['group_only'])
-                return
-            return await func(message, *args, **kwargs)
-        return wrapper
-    return decorator
-
-def pm_only():
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(message: Message, *args, **kwargs):
-            if message.chat.type != 'private':
-                # Получаем язык пользователя
-                user_id = message.from_user.id
-                lang = user_languages.get(user_id, 'en')
-                tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-                await message.answer(tr['pm_only'])
-                return
-            return await func(message, *args, **kwargs)
-        return wrapper
-    return decorator
-
 def check_bot_admin():
     def decorator(func):
         @wraps(func)
@@ -1922,239 +1892,68 @@ async def rules_broadcast_task():
             logger.error(f"Error in broadcast task: {e}")
         await asyncio.sleep(60)
 
-# Команды
-@dp.message(Command("puls"))
-@dp.message(Command("startpuls"))
-@dp.message(F.text.lower().in_(["pulse", "пульс", "понг"]))
-async def cmd_ping(message: Message):
-    start_time = time.time()
-    msg = await message.reply("⏳ ...")
-    end_time = time.time()
-    ping = round((end_time - start_time) * 1000)
-    response_time = round(end_time - start_time, 2)
-    
-    lang = 'en'
-    if message.chat.type in {'group', 'supergroup'}:
-        lang = db.get_group_language(message.chat.id)
+# ========== КОМАНДЫ ==========
+
+# Команда /start
+@dp.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext):
+    if message.chat.type == 'private':
+        # ЛС
+        await state.clear()
+        user_id = message.from_user.id
+        lang = user_languages.get(user_id, 'en')
+        groups = db.get_user_groups(user_id)
+        
+        if not groups:
+            text = (
+                "👋 <b>Welcome to Puls Chat Manager!</b>\n\n"
+                "You don't have any linked groups yet.\n\n"
+                "🔹 <b>How to start:</b>\n"
+                "1. Click the «➕ Add to group» button\n"
+                "2. Select the chat to add the bot\n"
+                "3. Make the bot an administrator\n"
+                "4. In the group, write /group or click the management button\n"
+                "5. Confirm group linking\n\n"
+                "After that, the group will appear in the list for configuration."
+            )
+            await message.answer(text, reply_markup=get_main_keyboard(lang))
+            return
+        
+        builder = InlineKeyboardBuilder()
+        for chat_id, title in groups:
+            builder.button(text=title or f"Group {chat_id}", callback_data=f"select_group_{chat_id}")
+        builder.button(text="◀️ Back", callback_data="back_to_main")
+        builder.adjust(1)
+        
+        await message.answer(
+            "📱 <b>Your groups:</b>\n\n"
+            "Select a group to configure:",
+            reply_markup=builder.as_markup()
+        )
     else:
-        lang = user_languages.get(message.from_user.id, 'en')
-    
-    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-    await msg.edit_text(tr['ping'].format(ping=ping, response=response_time), parse_mode="HTML")
-
-@dp.message(CommandStart())
-@group_only()
-async def cmd_start_group(message: Message):
-    chat_id = message.chat.id
-    lang = db.get_group_language(chat_id)
-    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-    text = (
-        f"👋 <b>Puls Chat Manager</b>\n\n"
-        f"{tr['main_menu']}\n\n"
-        f"• /rules - {tr['rules']}\n"
-        f"• /stats - {tr['my_stats']}\n"
-        f"• /top - {tr['top_active_btn']}\n"
-        f"• /group - {tr['group_manage']}\n"
-        f"• /puls - {tr['ping'].format(ping='?', response='?')}"
-    )
-    await message.reply(text, parse_mode="HTML")
-
-@dp.message(CommandStart())
-@pm_only()
-async def cmd_start_pm(message: Message, state: FSMContext):
-    await state.clear()
-    user_id = message.from_user.id
-    lang = user_languages.get(user_id, 'en')
-    groups = db.get_user_groups(user_id)
-    
-    if not groups:
+        # Группа
+        chat_id = message.chat.id
+        lang = db.get_group_language(chat_id)
+        tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
         text = (
-            "👋 <b>Welcome to Puls Chat Manager!</b>\n\n"
-            "You don't have any linked groups yet.\n\n"
-            "🔹 <b>How to start:</b>\n"
-            "1. Click the «➕ Add to group» button\n"
-            "2. Select the chat to add the bot\n"
-            "3. Make the bot an administrator\n"
-            "4. In the group, write /group or click the management button\n"
-            "5. Confirm group linking\n\n"
-            "After that, the group will appear in the list for configuration."
+            f"👋 <b>Puls Chat Manager</b>\n\n"
+            f"{tr['main_menu']}\n\n"
+            f"• /rules - {tr['rules']}\n"
+            f"• /stats - {tr['my_stats']}\n"
+            f"• /top - {tr['top_active_btn']}\n"
+            f"• /profile - {tr['profile'].format(name='')}\n"
+            f"• /group - {tr['group_manage']}\n"
+            f"• /puls - {tr['ping'].format(ping='?', response='?')}"
         )
-        await message.answer(text, reply_markup=get_main_keyboard(lang))
-        return
-    
-    builder = InlineKeyboardBuilder()
-    for chat_id, title in groups:
-        builder.button(text=title or f"Group {chat_id}", callback_data=f"select_group_{chat_id}")
-    builder.button(text="◀️ Back", callback_data="back_to_main")
-    builder.adjust(1)
-    
-    await message.answer(
-        "📱 <b>Your groups:</b>\n\n"
-        "Select a group to configure:",
-        reply_markup=builder.as_markup()
-    )
+        await message.reply(text, parse_mode="HTML")
 
-@dp.message(Command("adminstats"))
-@check_bot_admin()
-async def cmd_admin_stats(message: Message):
-    chats = db.get_all_chats()
-    text = (
-        "📊 <b>Bot Statistics</b>\n\n"
-        f"📱 Total groups: {len(chats)}\n\n"
-    )
-    
-    if chats:
-        text += "<b>📋 Groups list:</b>\n"
-        for chat_id, title, username, rules_enabled, welcome_enabled in chats:
-            if username:
-                link = f"https://t.me/{username}"
-                chat_info = f"<a href='{link}'>{title or 'No name'}</a>"
-            else:
-                chat_info = f"{title or 'No name'} (private)"
-            
-            rules_status = "✅" if rules_enabled else "❌"
-            welcome_status = "✅" if welcome_enabled else "❌"
-            text += f"• {chat_info} | Rules:{rules_status} Welcome:{welcome_status}\n"
-    
-    await message.answer(text)
-
-@dp.message(F.new_chat_members)
-async def on_bot_added(message: Message):
-    bot_info = await bot.get_me()
-    if any(member.id == bot_info.id for member in message.new_chat_members):
-        logger.info(f"Bot added to group {message.chat.id}")
-
-@dp.message(Command("group"))
-@dp.message(Command("manage"))
-@group_only()
-async def cmd_group_manage(message: Message):
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-    
-    if not await is_creator(chat_id, user_id):
-        await message.answer("❌ Only the group creator can configure the bot!")
-        return
-    
-    lang = db.get_group_language(chat_id)
-    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-    
-    owner_id = None
-    with db.get_connection() as conn:
-        c = conn.cursor()
-        c.execute('SELECT owner_id FROM group_rules WHERE chat_id = ?', (chat_id,))
-        result = c.fetchone()
-        owner_id = result[0] if result else None
-    
-    if owner_id == user_id:
-        await message.answer(
-            f"{tr['settings_in_pm']}",
-            reply_markup=get_pm_link_keyboard(lang)
-        )
-    else:
-        text = f"{tr['group_not_linked']}\n\n{tr['want_to_link']}"
-        await message.answer(
-            text,
-            reply_markup=get_link_group_keyboard(chat_id, lang)
-        )
-
-@dp.callback_query(F.data.startswith("link_group_"))
-async def link_group(callback: CallbackQuery):
-    chat_id = int(callback.data.split('_')[-1])
-    user_id = callback.from_user.id
-    
-    if not await is_creator(chat_id, user_id):
-        await callback.answer("❌ You are not the creator of this group!", show_alert=True)
-        return
-    
-    try:
-        chat = await bot.get_chat(chat_id)
-        chat_title = chat.title
-        chat_username = chat.username
-    except:
-        chat_title = "Group"
-        chat_username = None
-    
-    db.save_rules(
-        chat_id=chat_id,
-        owner_id=user_id,
-        chat_title=chat_title,
-        chat_username=chat_username
-    )
-    
-    lang = 'en'
-    with db.get_connection() as conn:
-        c = conn.cursor()
-        c.execute('UPDATE group_rules SET language = ? WHERE chat_id = ?', (lang, chat_id))
-        conn.commit()
-    
-    tr = TRANSLATIONS[lang]
-    await callback.message.edit_text(tr['group_linked'])
-    await callback.answer("✅ Group linked!")
-    
-    try:
-        await bot.send_message(
-            user_id,
-            f"✅ Group <b>{chat_title}</b> successfully linked!\n\n"
-            f"Now you can configure it by selecting it in the menu.",
-            reply_markup=get_main_keyboard(lang)
-        )
-    except:
-        pass
-
-@dp.callback_query(F.data == "cancel_link")
-async def cancel_link(callback: CallbackQuery):
-    await callback.message.delete()
-    await callback.answer()
-
-@dp.message(Command("rules"))
-@group_only()
-async def cmd_rules(message: Message):
-    chat_id = message.chat.id
-    lang = db.get_group_language(chat_id)
-    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-    
-    rules_html = db.get_rules_html(chat_id)
-    if rules_html and db.get_rules_enabled(chat_id):
-        await message.reply(f"<b>{tr['rules_reminder']}</b>\n\n{rules_html}", parse_mode="HTML")
-    else:
-        await message.answer(tr['error_no_rules'])
-
-@dp.message(Command("top"))
-@group_only()
-async def cmd_top_messages(message: Message):
-    global stats_updating
-    
-    for _ in range(50):
-        if not stats_updating:
-            break
-        await asyncio.sleep(0.1)
-    else:
-        await message.reply(get_text(message.chat.id, message.from_user.id, 'stats_updating'))
-        return
-    
-    chat_id = message.chat.id
-    lang = db.get_group_language(chat_id)
-    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-    
-    top = db.get_top_messages(chat_id, period='all', limit=10)
-    
-    if not top:
-        text = tr['stats_empty']
-    else:
-        text = f"<b>{tr['top_active']}</b>\n\n"
-        for i, (user_id, count) in enumerate(top, 1):
-            try:
-                user = await bot.get_chat_member(chat_id, user_id)
-                name = user.user.full_name
-            except:
-                name = f"ID {user_id}"
-            text += f"{i}. {name} — {count} {tr['messages']}\n"
-    
-    await message.reply(text, parse_mode="HTML")
-
+# Команда /stats
 @dp.message(Command("stats"))
-@group_only()
-async def cmd_my_stats(message: Message):
+async def cmd_stats(message: Message):
+    if message.chat.type == 'private':
+        await message.answer("❌ This command works only in groups!")
+        return
+    
     global stats_updating
     
     for _ in range(50):
@@ -2199,9 +1998,50 @@ async def cmd_my_stats(message: Message):
     
     await message.reply(text, parse_mode="HTML")
 
+# Команда /top
+@dp.message(Command("top"))
+async def cmd_top(message: Message):
+    if message.chat.type == 'private':
+        await message.answer("❌ This command works only in groups!")
+        return
+    
+    global stats_updating
+    
+    for _ in range(50):
+        if not stats_updating:
+            break
+        await asyncio.sleep(0.1)
+    else:
+        await message.reply(get_text(message.chat.id, message.from_user.id, 'stats_updating'))
+        return
+    
+    chat_id = message.chat.id
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    top = db.get_top_messages(chat_id, period='all', limit=10)
+    
+    if not top:
+        text = tr['stats_empty']
+    else:
+        text = f"<b>{tr['top_active']}</b>\n\n"
+        for i, (user_id, count) in enumerate(top, 1):
+            try:
+                user = await bot.get_chat_member(chat_id, user_id)
+                name = user.user.full_name
+            except:
+                name = f"ID {user_id}"
+            text += f"{i}. {name} — {count} {tr['messages']}\n"
+    
+    await message.reply(text, parse_mode="HTML")
+
+# Команда /profile
 @dp.message(Command("profile"))
-@group_only()
 async def cmd_profile(message: Message):
+    if message.chat.type == 'private':
+        await message.answer("❌ This command works only in groups!")
+        return
+    
     global stats_updating
     
     for _ in range(50):
@@ -2250,6 +2090,144 @@ async def cmd_profile(message: Message):
         )
     
     await message.reply(text, parse_mode="HTML")
+
+# Команда /rules
+@dp.message(Command("rules"))
+async def cmd_rules(message: Message):
+    if message.chat.type == 'private':
+        await message.answer("❌ This command works only in groups!")
+        return
+    
+    chat_id = message.chat.id
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    rules_html = db.get_rules_html(chat_id)
+    if rules_html and db.get_rules_enabled(chat_id):
+        await message.reply(f"<b>{tr['rules_reminder']}</b>\n\n{rules_html}", parse_mode="HTML")
+    else:
+        await message.answer(tr['error_no_rules'])
+
+# Команда /group
+@dp.message(Command("group"))
+@dp.message(Command("manage"))
+async def cmd_group(message: Message):
+    if message.chat.type == 'private':
+        await message.answer("❌ This command works only in groups!")
+        return
+    
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    
+    if not await is_creator(chat_id, user_id):
+        await message.answer("❌ Only the group creator can configure the bot!")
+        return
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    
+    owner_id = None
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('SELECT owner_id FROM group_rules WHERE chat_id = ?', (chat_id,))
+        result = c.fetchone()
+        owner_id = result[0] if result else None
+    
+    if owner_id == user_id:
+        await message.answer(
+            f"{tr['settings_in_pm']}",
+            reply_markup=get_pm_link_keyboard(lang)
+        )
+    else:
+        text = f"{tr['group_not_linked']}\n\n{tr['want_to_link']}"
+        await message.answer(
+            text,
+            reply_markup=get_link_group_keyboard(chat_id, lang)
+        )
+
+# Команда /puls и /startpuls
+@dp.message(Command("puls"))
+@dp.message(Command("startpuls"))
+@dp.message(F.text.lower().in_(["pulse", "пульс", "понг"]))
+async def cmd_ping(message: Message):
+    start_time = time.time()
+    msg = await message.reply("⏳ ...")
+    end_time = time.time()
+    ping = round((end_time - start_time) * 1000)
+    response_time = round(end_time - start_time, 2)
+    
+    if message.chat.type in {'group', 'supergroup'}:
+        lang = db.get_group_language(message.chat.id)
+    else:
+        lang = user_languages.get(message.from_user.id, 'en')
+    
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    await msg.edit_text(tr['ping'].format(ping=ping, response=response_time), parse_mode="HTML")
+
+# Команда /adminstats
+@dp.message(Command("adminstats"))
+@check_bot_admin()
+async def cmd_admin_stats(message: Message):
+    chats = db.get_all_chats()
+    text = (
+        "📊 <b>Bot Statistics</b>\n\n"
+        f"📱 Total groups: {len(chats)}\n\n"
+    )
+    
+    if chats:
+        text += "<b>📋 Groups list:</b>\n"
+        for chat_id, title, username, rules_enabled, welcome_enabled in chats:
+            if username:
+                link = f"https://t.me/{username}"
+                chat_info = f"<a href='{link}'>{title or 'No name'}</a>"
+            else:
+                chat_info = f"{title or 'No name'} (private)"
+            
+            rules_status = "✅" if rules_enabled else "❌"
+            welcome_status = "✅" if welcome_enabled else "❌"
+            text += f"• {chat_info} | Rules:{rules_status} Welcome:{welcome_status}\n"
+    
+    await message.answer(text)
+
+# ========== АВТООТВЕТЧИК И СТАТИСТИКА ==========
+@dp.message(F.chat.type.in_({"group", "supergroup"}))
+async def handle_group_message(message: Message):
+    if message.from_user.is_bot:
+        return
+    
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    text = message.text or message.caption or ""
+    
+    # Логируем для отладки
+    logger.debug(f"Message in {chat_id} from {user_id}: '{text[:50]}...'")
+    
+    # АВТООТВЕТЧИК - работает для ВСЕХ сообщений
+    if text:
+        text_lower = text.lower()
+        responses = db.get_auto_responses(chat_id)
+        
+        # Логируем количество триггеров
+        if responses:
+            logger.debug(f"Found {len(responses)} auto responses for chat {chat_id}")
+        
+        for trigger, response in responses:
+            if trigger.lower() in text_lower:
+                logger.info(f"Auto response triggered in {chat_id} for trigger '{trigger}'")
+                try:
+                    await message.reply(response, parse_mode="HTML", disable_notification=True)
+                    # Если ответили, выходим, но статистику все равно обновим
+                    break
+                except Exception as e:
+                    logger.warning(f"Auto response error in {chat_id}: {e}")
+                break
+    
+    # СТАТИСТИКА - обновляем ТОЛЬКО если пользователь подтвержден
+    conf_type = db.get_confirmation_type(chat_id)
+    if db.has_user_confirmed(chat_id, user_id, conf_type):
+        db.update_message_count(chat_id, user_id)
+
+# ========== ОБРАБОТЧИКИ ВХОДА/ВЫХОДА ==========
 
 @dp.chat_member()
 async def on_member_join(update: ChatMemberUpdated):
@@ -2366,6 +2344,23 @@ async def on_member_join(update: ChatMemberUpdated):
         if msg_text:
             await bot.send_message(chat_id, msg_text, reply_markup=builder.as_markup(), parse_mode="HTML")
 
+@dp.chat_member(F.new_chat_member.status == "left")
+async def on_member_left(update: ChatMemberUpdated):
+    chat_id = update.chat.id
+    user = update.from_user
+    db.set_left_chat(chat_id, user.id)
+    
+    lang = db.get_group_language(chat_id)
+    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
+    await bot.send_message(chat_id, tr['user_left'].format(name=user.full_name))
+
+@dp.message(F.new_chat_members)
+async def on_bot_added(message: Message):
+    bot_info = await bot.get_me()
+    if any(member.id == bot_info.id for member in message.new_chat_members):
+        logger.info(f"Bot added to group {message.chat.id}")
+
+# ========== ПРИВЕТСТВИЕ ==========
 async def send_simple_welcome(chat_id: int, user: types.User):
     lang = db.get_group_language(chat_id)
     tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
@@ -2406,6 +2401,8 @@ async def send_simple_welcome(chat_id: int, user: types.User):
             reply_markup=get_welcome_buttons(chat_id, lang),
             parse_mode="HTML"
         )
+
+# ========== ОБРАБОТЧИКИ ПОДТВЕРЖДЕНИЯ ==========
 
 @dp.callback_query(F.data.startswith("confirm_not_bot_"))
 async def process_confirm_not_bot(callback: CallbackQuery):
@@ -2507,36 +2504,7 @@ async def process_agree_rules(callback: CallbackQuery):
     await callback.message.edit_text(tr['thanks_confirmation'])
     await callback.answer("✅")
 
-@dp.message(F.chat.type.in_({"group", "supergroup"}))
-async def update_stats_and_auto_response(message: Message):
-    if not message.from_user.is_bot:
-        chat_id = message.chat.id
-        user_id = message.from_user.id
-        
-        conf_type = db.get_confirmation_type(chat_id)
-        if db.has_user_confirmed(chat_id, user_id, conf_type):
-            db.update_message_count(chat_id, user_id)
-            
-            text = message.text.lower() if message.text else ""
-            if text:
-                responses = db.get_auto_responses(chat_id)
-                for trigger, response in responses:
-                    if trigger in text:
-                        try:
-                            await message.reply(response, parse_mode="HTML", disable_notification=True)
-                        except Exception as e:
-                            logger.warning(f"Auto response error in {chat_id}: {e}")
-                        break
-
-@dp.chat_member(F.new_chat_member.status == "left")
-async def on_member_left(update: ChatMemberUpdated):
-    chat_id = update.chat.id
-    user = update.from_user
-    db.set_left_chat(chat_id, user.id)
-    
-    lang = db.get_group_language(chat_id)
-    tr = TRANSLATIONS.get(lang, TRANSLATIONS['en'])
-    await bot.send_message(chat_id, tr['user_left'].format(name=user.full_name))
+# ========== ОБРАБОТЧИКИ НАСТРОЕК В ЛС ==========
 
 @dp.callback_query(F.data == "back_to_main")
 @check_owner()
@@ -4187,7 +4155,7 @@ async def unlink_group(callback: CallbackQuery, state: FSMContext):
     await callback.answer("✅ Group unlinked!")
     
     await state.clear()
-    await cmd_start_pm(callback.message, state)
+    await cmd_start(callback.message, state)
 
 @dp.callback_query(F.data == "group_manage")
 @check_owner()
