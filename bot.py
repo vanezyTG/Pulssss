@@ -3694,7 +3694,7 @@ async def admin_panel(message: Message, state: FSMContext):
     builder.add(create_button("📦 Бэкап БД", "admin_backup", "secondary"))
     builder.add(create_button("❌ Выключить бота", "admin_shutdown", "danger"))
     builder.adjust(2)
-    
+
     await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
 
 # Управление техработами
