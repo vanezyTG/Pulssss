@@ -4155,7 +4155,7 @@ async def admin_broadcast(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(AdminBroadcastStates.waiting_for_text)
 async def process_broadcast_text(message: Message, state: FSMContext):
-    text = message.html_text
+    text = message.text  # вместо message.html_text
     
     with db.get_connection() as conn:
         c = conn.cursor()
