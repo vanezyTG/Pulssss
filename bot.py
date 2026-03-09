@@ -3761,7 +3761,7 @@ async def maintenance_message(callback: CallbackQuery, state: FSMContext):
         "<code>🛠 Бот временно недоступен. Ведутся технические работы. Вернёмся через 15 минут!</code>\n\n"
         "Или отправьте /cancel для отмены."
     )
-    await state.set_state("maintenance_message")
+    await state.set_state(MaintenanceStates.waiting_for_message)  # ИСПРАВЛЕНО: было "maintenance_message"
     await callback.answer()
 
 @dp.message(Command("cancel"))
