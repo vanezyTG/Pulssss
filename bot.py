@@ -10,11 +10,13 @@ from contextlib import contextmanager
 from functools import wraps
 from collections import defaultdict
 import threading
+import os  # <-- НОВЫЙ (для бэкапа)
+import shutil  # <-- НОВЫЙ (для копирования файлов)
 
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, CallbackQuery, ChatMemberUpdated, ChatPermissions, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, ChatMemberUpdated, ChatPermissions, InlineKeyboardButton, FSInputFile  # <-- ДОБАВЬТЕ FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
