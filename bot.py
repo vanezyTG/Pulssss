@@ -2083,7 +2083,7 @@ async def select_group(callback: CallbackQuery, state: FSMContext):
     
     await state.update_data(
         selected_chat_id=chat_id,
-        f"msg_owner_{callback.message.message_id}": callback.from_user.id
+        **{f"msg_owner_{callback.message.message_id}": callback.from_user.id}  # <-- ИСПРАВЛЕНО
     )
     
     with db.get_connection() as conn:
