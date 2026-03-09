@@ -3629,13 +3629,598 @@ async def top_active(callback: CallbackQuery):
     
     await callback.message.answer(text, parse_mode="HTML")
     await callback.answer()
+# ========== РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ ==========
+
+# Глобальная переменная для режима техработ
+technical_maintenance = False
+maintenance_message = "🛠 Бот временно остановлен на технические работы. Приносим извинения за неудобства!"
+
+# Middleware для проверки техработ
+class MaintenanceMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        global technical_maintenance
+        
+        # Пропускаем админов бота всегда
+        if isinstance(event, (Message, CallbackQuery)):
+            user_id = event.from_user.id
+            if user_id in ADMIN_IDS:
+                return await handler(event, data)
+        
+        # Если техработы включены
+        if technical_maintenance:
+            # Для сообщений
+            if isinstance(event, Message):
+                if event.chat.type in {'group', 'supergroup'}:
+                    await event.reply(maintenance_message)
+                else:
+                    await event.answer(maintenance_message)
+                return
+            
+            # Для callback'ов
+            if isinstance(event, CallbackQuery):
+                await event.answer("🛠 Бот на техработах", show_alert=True)
+                return
+        
+        return await handler(event, data)
+
+# ========== АДМИН ПАНЕЛЬ ==========
+
+# Команда /admin - вход в админ панель
+@dp.message(Command("admin"))
+@check_bot_admin()
+async def admin_panel(message: Message, state: FSMContext):
+    await state.clear()
+    global technical_maintenance
+    
+    status = "🟢 РАБОТАЕТ" if not technical_maintenance else "🔴 ТЕХРАБОТЫ"
+    status_color = "success" if not technical_maintenance else "danger"
+    
+    text = (
+        "👑 <b>Панель администратора</b>\n\n"
+        f"<b>Статус бота:</b> {status}\n"
+        f"<b>Сообщение:</b> {maintenance_message}\n\n"
+        "Выберите действие:"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.add(create_button("📊 Общая статистика", "admin_stats", "primary"))
+    builder.add(create_button("📱 Список групп", "admin_groups", "primary"))
+    builder.add(create_button("👥 Пользователи", "admin_users", "primary"))
+    builder.add(create_button("📋 Логи нарушений", "admin_logs", "primary"))
+    builder.add(create_button("🛠 Техработы", "admin_maintenance", status_color))
+    builder.add(create_button("📢 Рассылка", "admin_broadcast", "success"))
+    builder.add(create_button("📦 Бэкап БД", "admin_backup", "secondary"))
+    builder.add(create_button("❌ Выключить бота", "admin_shutdown", "danger"))
+    builder.adjust(2)
+    
+    await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+
+# Управление техработами
+@dp.callback_query(F.data == "admin_maintenance")
+@check_bot_admin()
+async def admin_maintenance(callback: CallbackQuery, state: FSMContext):
+    global technical_maintenance, maintenance_message
+    
+    text = (
+        "🛠 <b>Режим технических работ</b>\n\n"
+        f"<b>Текущий статус:</b> {'🔴 ВКЛЮЧЕН' if technical_maintenance else '🟢 ВЫКЛЮЧЕН'}\n"
+        f"<b>Сообщение:</b>\n<code>{maintenance_message}</code>\n\n"
+        "Выберите действие:"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    
+    if technical_maintenance:
+        builder.add(create_button("🟢 Выключить техработы", "maintenance_off", "success"))
+    else:
+        builder.add(create_button("🔴 Включить техработы", "maintenance_on", "danger"))
+    
+    builder.add(create_button("✏️ Изменить сообщение", "maintenance_message", "primary"))
+    builder.add(create_button("◀️ Назад", "admin_back", "secondary"))
+    builder.adjust(1)
+    
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
+
+# Включение техработ
+@dp.callback_query(F.data == "maintenance_on")
+@check_bot_admin()
+async def maintenance_on(callback: CallbackQuery):
+    global technical_maintenance
+    technical_maintenance = True
+    
+    # Оповещаем все группы
+    await notify_all_groups(maintenance_message)
+    
+    await callback.answer("🛠 Техработы ВКЛЮЧЕНЫ!", show_alert=True)
+    await admin_maintenance(callback, None)
+
+# Выключение техработ
+@dp.callback_query(F.data == "maintenance_off")
+@check_bot_admin()
+async def maintenance_off(callback: CallbackQuery):
+    global technical_maintenance
+    technical_maintenance = False
+    
+    # Оповещаем все группы о возвращении
+    await notify_all_groups("✅ Бот снова в работе! Технические работы завершены.")
+    
+    await callback.answer("🟢 Техработы ВЫКЛЮЧЕНЫ!", show_alert=True)
+    await admin_maintenance(callback, None)
+
+# Изменение сообщения техработ
+@dp.callback_query(F.data == "maintenance_message")
+@check_bot_admin()
+async def maintenance_message(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "📝 Отправьте новое сообщение для режима техработ.\n\n"
+        "Оно будет показываться всем пользователям при попытке использовать бота.\n\n"
+        "Пример:\n"
+        "<code>🛠 Бот временно недоступен. Ведутся технические работы. Вернёмся через 15 минут!</code>\n\n"
+        "Или отправьте /cancel для отмены."
+    )
+    await state.set_state("maintenance_message")
+    await callback.answer()
+
+@dp.message(Command("cancel"))
+async def cancel_maintenance(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    await state.clear()
+    await message.answer("❌ Отменено.")
+
+@dp.message(MaintenanceStates.waiting_for_message)
+async def process_maintenance_message(message: Message, state: FSMContext):
+    global maintenance_message
+    maintenance_message = message.text
+    
+    await state.clear()
+    await message.reply(f"✅ Сообщение сохранено!\n\nНовое сообщение:\n<code>{maintenance_message}</code>", parse_mode="HTML")
+
+# Функция оповещения всех групп
+async def notify_all_groups(text: str):
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('SELECT chat_id FROM group_rules')
+        groups = c.fetchall()
+    
+    for chat_id, in groups:
+        try:
+            await bot.send_message(chat_id, text, parse_mode="HTML")
+            await asyncio.sleep(0.05)
+        except:
+            pass
+
+# Выключение бота (мягкое)
+@dp.callback_query(F.data == "admin_shutdown")
+@check_bot_admin()
+async def admin_shutdown(callback: CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.add(create_button("✅ Да, выключить", "admin_shutdown_confirm", "danger"))
+    builder.add(create_button("🚫 Нет", "admin_back", "secondary"))
+    builder.adjust(1)
+    
+    await callback.message.edit_text(
+        "⚠️ <b>Вы уверены, что хотите полностью выключить бота?</b>\n\n"
+        "Бот перестанет отвечать на любые команды, кроме админских.\n"
+        "Чтобы снова включить, нужно будет перезапустить скрипт вручную.",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_shutdown_confirm")
+@check_bot_admin()
+async def admin_shutdown_confirm(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "🛑 <b>Бот полностью остановлен!</b>\n\n"
+        "Администраторы всё ещё имеют доступ.\n"
+        "Чтобы включить снова, перезапустите скрипт."
+    )
+    await callback.answer()
+    
+    # Просто включаем техработы с особым сообщением
+    global technical_maintenance, maintenance_message
+    technical_maintenance = True
+    maintenance_message = "🛑 Бот полностью остановлен администратором."
+
+# Общая статистика
+@dp.callback_query(F.data == "admin_stats")
+@check_bot_admin()
+async def admin_stats(callback: CallbackQuery):
+    global technical_maintenance
+    
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        
+        c.execute('SELECT COUNT(*) FROM group_rules')
+        total_groups = c.fetchone()[0] or 0
+        
+        c.execute('SELECT COUNT(*) FROM group_rules WHERE rules_html IS NOT NULL')
+        groups_with_rules = c.fetchone()[0] or 0
+        
+        c.execute('SELECT COUNT(*) FROM global_users')
+        total_users = c.fetchone()[0] or 0
+        
+        c.execute('SELECT COUNT(*) FROM violation_logs')
+        total_violations = c.fetchone()[0] or 0
+        
+        today_start = datetime.now(SERVER_TZ).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        c.execute('SELECT COUNT(DISTINCT user_id) FROM violation_logs WHERE timestamp > ?', (today_start,))
+        active_today = c.fetchone()[0] or 0
+        
+        c.execute('SELECT chat_id, chat_title, owner_id FROM group_rules ORDER BY chat_id DESC LIMIT 5')
+        recent_groups = c.fetchall()
+    
+    maintenance_status = "🔴 ВКЛ" if technical_maintenance else "🟢 ВЫКЛ"
+    
+    text = (
+        "📊 <b>Общая статистика бота</b>\n\n"
+        f"🛠 <b>Техработы:</b> {maintenance_status}\n\n"
+        f"📱 <b>Группы:</b>\n"
+        f"• Всего групп: {total_groups}\n"
+        f"• С правилами: {groups_with_rules}\n"
+        f"• Без правил: {total_groups - groups_with_rules}\n\n"
+        f"👥 <b>Пользователи:</b>\n"
+        f"• Всего: {total_users}\n"
+        f"• Нарушений: {total_violations}\n"
+        f"• Активных сегодня: {active_today}\n\n"
+        f"🕐 <b>Время сервера:</b> {datetime.now(SERVER_TZ).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    )
+    
+    if recent_groups:
+        text += "📌 <b>Последние группы:</b>\n"
+        for chat_id, title, owner_id in recent_groups:
+            text += f"• {title or 'Без названия'} (ID: {chat_id}) | Владелец: {owner_id}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.add(create_button("🔄 Обновить", "admin_stats", "primary"))
+    builder.add(create_button("◀️ Назад", "admin_back", "secondary"))
+    builder.adjust(2)
+    
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
+
+# Список всех групп
+@dp.callback_query(F.data == "admin_groups")
+@check_bot_admin()
+async def admin_groups(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(admin_page=1)
+    await show_groups_page(callback, state)
+
+async def show_groups_page(callback: CallbackQuery, state: FSMContext, page: int = 1):
+    data = await state.get_data()
+    page = data.get('admin_page', 1)
+    items_per_page = 5
+    
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM group_rules')
+        total = c.fetchone()[0] or 0
+        
+        offset = (page - 1) * items_per_page
+        c.execute('''SELECT chat_id, chat_title, chat_username, owner_id, rules_enabled, welcome_enabled,
+                           (rules_html IS NOT NULL) as has_rules
+                    FROM group_rules 
+                    ORDER BY chat_id 
+                    LIMIT ? OFFSET ?''', (items_per_page, offset))
+        groups = c.fetchall()
+    
+    total_pages = (total + items_per_page - 1) // items_per_page if total > 0 else 1
+    
+    text = f"📱 <b>Список групп</b> (страница {page}/{total_pages})\n\n"
+    
+    if not groups:
+        text += "❌ Групп пока нет."
+    else:
+        for chat_id, title, username, owner_id, rules_enabled, welcome_enabled, has_rules in groups:
+            status = []
+            if has_rules:
+                status.append("📜" + ("✅" if rules_enabled else "❌"))
+            if welcome_enabled:
+                status.append("👋✅")
+            
+            status_text = f" [{''.join(status)}]" if status else ""
+            
+            if username:
+                link = f"https://t.me/{username}"
+                group_info = f"<a href='{link}'>{title or 'Без названия'}</a>"
+            else:
+                group_info = title or 'Без названия'
+            
+            text += f"• {group_info}{status_text}\n"
+            text += f"  ID: <code>{chat_id}</code> | Владелец: {owner_id or 'нет'}\n\n"
+    
+    builder = InlineKeyboardBuilder()
+    
+    if page > 1:
+        builder.add(create_button("◀️ Назад", "admin_groups_prev", "secondary"))
+    if page < total_pages:
+        builder.add(create_button("Вперед ▶️", "admin_groups_next", "secondary"))
+    
+    builder.add(create_button("🔄 Обновить", "admin_groups", "primary"))
+    builder.add(create_button("◀️ В админ панель", "admin_back", "secondary"))
+    builder.adjust(2)
+    
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_groups_next")
+@check_bot_admin()
+async def admin_groups_next(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = data.get('admin_page', 1) + 1
+    await state.update_data(admin_page=page)
+    await show_groups_page(callback, state, page)
+
+@dp.callback_query(F.data == "admin_groups_prev")
+@check_bot_admin()
+async def admin_groups_prev(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = max(1, data.get('admin_page', 1) - 1)
+    await state.update_data(admin_page=page)
+    await show_groups_page(callback, state, page)
+
+# Пользователи
+@dp.callback_query(F.data == "admin_users")
+@check_bot_admin()
+async def admin_users(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(admin_users_page=1)
+    await show_users_page(callback, state)
+
+async def show_users_page(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = data.get('admin_users_page', 1)
+    items_per_page = 5
+    
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM global_users')
+        total = c.fetchone()[0] or 0
+        
+        offset = (page - 1) * items_per_page
+        c.execute('''SELECT user_id, global_id, first_seen, username, full_name
+                    FROM global_users 
+                    ORDER BY first_seen DESC 
+                    LIMIT ? OFFSET ?''', (items_per_page, offset))
+        users = c.fetchall()
+        
+        c.execute('''SELECT user_name, COUNT(*) as cnt 
+                    FROM violation_logs 
+                    GROUP BY user_id 
+                    ORDER BY cnt DESC 
+                    LIMIT 5''')
+        top_violators = c.fetchall()
+    
+    total_pages = (total + items_per_page - 1) // items_per_page if total > 0 else 1
+    
+    text = f"👥 <b>Пользователи</b> (страница {page}/{total_pages})\n\n"
+    
+    if not users:
+        text += "❌ Пользователей пока нет."
+    else:
+        for user_id, global_id, first_seen, username, full_name in users:
+            first_seen_date = format_datetime(first_seen)
+            text += f"• <b>{full_name}</b> (@{username})\n"
+            text += f"  ID: <code>{global_id}</code> | TG: <code>{user_id}</code>\n"
+            text += f"  Зарегистрирован: {first_seen_date}\n\n"
+    
+    if top_violators:
+        text += "⚠️ <b>Топ нарушителей:</b>\n"
+        for name, count in top_violators:
+            text += f"• {name} — {count} нарушений\n"
+    
+    builder = InlineKeyboardBuilder()
+    
+    if page > 1:
+        builder.add(create_button("◀️ Назад", "admin_users_prev", "secondary"))
+    if page < total_pages:
+        builder.add(create_button("Вперед ▶️", "admin_users_next", "secondary"))
+    
+    builder.add(create_button("🔄 Обновить", "admin_users", "primary"))
+    builder.add(create_button("◀️ В админ панель", "admin_back", "secondary"))
+    builder.adjust(2)
+    
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_users_next")
+@check_bot_admin()
+async def admin_users_next(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = data.get('admin_users_page', 1) + 1
+    await state.update_data(admin_users_page=page)
+    await show_users_page(callback, state)
+
+@dp.callback_query(F.data == "admin_users_prev")
+@check_bot_admin()
+async def admin_users_prev(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = max(1, data.get('admin_users_page', 1) - 1)
+    await state.update_data(admin_users_page=page)
+    await show_users_page(callback, state)
+
+# Логи нарушений
+@dp.callback_query(F.data == "admin_logs")
+@check_bot_admin()
+async def admin_logs(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(admin_logs_page=1)
+    await show_logs_page(callback, state)
+
+async def show_logs_page(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = data.get('admin_logs_page', 1)
+    items_per_page = 5
+    
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM violation_logs')
+        total = c.fetchone()[0] or 0
+        
+        offset = (page - 1) * items_per_page
+        c.execute('''SELECT chat_id, user_name, reason, punishment, timestamp, message_link
+                    FROM violation_logs 
+                    ORDER BY timestamp DESC 
+                    LIMIT ? OFFSET ?''', (items_per_page, offset))
+        logs = c.fetchall()
+    
+    total_pages = (total + items_per_page - 1) // items_per_page if total > 0 else 1
+    
+    text = f"📋 <b>Логи нарушений</b> (страница {page}/{total_pages})\n\n"
+    
+    if not logs:
+        text += "❌ Нарушений пока нет."
+    else:
+        for chat_id, user_name, reason, punishment, ts, link in logs:
+            time_str = format_datetime(ts)
+            text += f"• <b>{user_name}</b> | {time_str}\n"
+            text += f"  Причина: {reason} | Наказание: {punishment}\n"
+            text += f"  Чат: <code>{chat_id}</code> | <a href='{link}'>Сообщение</a>\n\n"
+    
+    builder = InlineKeyboardBuilder()
+    
+    if page > 1:
+        builder.add(create_button("◀️ Назад", "admin_logs_prev", "secondary"))
+    if page < total_pages:
+        builder.add(create_button("Вперед ▶️", "admin_logs_next", "secondary"))
+    
+    builder.add(create_button("🔄 Обновить", "admin_logs", "primary"))
+    builder.add(create_button("🗑 Очистить все", "admin_logs_clear", "danger"))
+    builder.add(create_button("◀️ В админ панель", "admin_back", "secondary"))
+    builder.adjust(2)
+    
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_logs_next")
+@check_bot_admin()
+async def admin_logs_next(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = data.get('admin_logs_page', 1) + 1
+    await state.update_data(admin_logs_page=page)
+    await show_logs_page(callback, state)
+
+@dp.callback_query(F.data == "admin_logs_prev")
+@check_bot_admin()
+async def admin_logs_prev(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    page = max(1, data.get('admin_logs_page', 1) - 1)
+    await state.update_data(admin_logs_page=page)
+    await show_logs_page(callback, state)
+
+@dp.callback_query(F.data == "admin_logs_clear")
+@check_bot_admin()
+async def admin_logs_clear(callback: CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.add(create_button("✅ Да, очистить", "admin_logs_clear_confirm", "danger"))
+    builder.add(create_button("🚫 Нет", "admin_logs", "secondary"))
+    builder.adjust(1)
+    
+    await callback.message.edit_text(
+        "⚠️ <b>Вы уверены, что хотите очистить все логи нарушений?</b>\n\n"
+        "Это действие нельзя отменить!",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_logs_clear_confirm")
+@check_bot_admin()
+async def admin_logs_clear_confirm(callback: CallbackQuery):
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('DELETE FROM violation_logs')
+        conn.commit()
+    
+    await callback.answer("✅ Все логи очищены!", show_alert=True)
+    await admin_logs(callback, None)
+
+# Рассылка сообщений
+@dp.callback_query(F.data == "admin_broadcast")
+@check_bot_admin()
+async def admin_broadcast(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "📢 <b>Рассылка сообщений</b>\n\n"
+        "Отправьте текст для рассылки всем группам.\n"
+        "Можно использовать HTML-разметку.\n\n"
+        "Пример:\n"
+        "<code>&lt;b&gt;Важное объявление!&lt;/b&gt;</code>\n\n"
+        "Или отправьте /cancel для отмены."
+    )
+    await state.set_state(AdminBroadcastStates.waiting_for_text)
+    await callback.answer()
+
+@dp.message(AdminBroadcastStates.waiting_for_text)
+async def process_broadcast_text(message: Message, state: FSMContext):
+    text = message.html_text
+    
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        c.execute('SELECT chat_id FROM group_rules')
+        groups = c.fetchall()
+    
+    sent = 0
+    failed = 0
+    
+    status_msg = await message.answer(f"📤 Начинаю рассылку...\nВсего групп: {len(groups)}")
+    
+    for chat_id, in groups:
+        try:
+            await bot.send_message(chat_id, text, parse_mode="HTML")
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            failed += 1
+            logger.warning(f"Не удалось отправить в {chat_id}: {e}")
+        
+        if (sent + failed) % 10 == 0:
+            await status_msg.edit_text(f"📤 Прогресс: {sent + failed}/{len(groups)}\n✅ Успешно: {sent}\n❌ Ошибок: {failed}")
+    
+    await status_msg.edit_text(f"✅ Рассылка завершена!\n✅ Успешно: {sent}\n❌ Ошибок: {failed}")
+    
+    if failed > 0:
+        await message.answer("⚠️ Некоторые группы не получили сообщение. Проверьте, что бот всё ещё там админ.")
+    
+    await state.clear()
+
+# Бэкап базы данных
+@dp.callback_query(F.data == "admin_backup")
+@check_bot_admin()
+async def admin_backup(callback: CallbackQuery):
+    try:
+        import shutil
+        from datetime import datetime
+        
+        backup_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        shutil.copy2("puls_manager.db", backup_name)
+        
+        with open(backup_name, 'rb') as f:
+            await callback.message.answer_document(
+                types.FSInputFile(backup_name),
+                caption=f"✅ Бэкап создан: {backup_name}"
+            )
+        
+        import os
+        os.remove(backup_name)
+        
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+# Возврат в админ панель
+@dp.callback_query(F.data == "admin_back")
+@check_bot_admin()
+async def admin_back(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await admin_panel(callback.message, state)
 
 # Запуск бота
 async def main():
     dp.message.middleware(AntiFloodMiddleware())
+    dp.message.middleware(MaintenanceMiddleware())  # новая строка
+    dp.callback_query.middleware(MaintenanceMiddleware())  # новая строка
     asyncio.create_task(rules_broadcast_task())
     asyncio.create_task(reset_periodic_counters())
     await dp.start_polling(bot)
-
 if __name__ == "__main__":
     asyncio.run(main())
