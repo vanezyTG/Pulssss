@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-BOT_TOKEN = "8557190026:AAENDFgMgIPPUFxhBoxYBr1k-R8et0rL-P8"
+BOT_TOKEN = "8557190026:AAF-3WD36XE0ll18IdoNtET_GDH67CRHUoo"
 BOT_USERNAME = "PulsOfficialManager_bot"
 ADMIN_IDS = [6708209142]
 
