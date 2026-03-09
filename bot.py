@@ -88,6 +88,12 @@ class LinksStates(StatesGroup):
 class ConfirmationStates(StatesGroup):
     waiting_for_confirmation = State()
 
+class MaintenanceStates(StatesGroup):
+    waiting_for_message = State()
+
+class AdminBroadcastStates(StatesGroup):
+    waiting_for_text = State()
+
 # ========== ДЕКОРАТОРЫ ПРОВЕРКИ ПРАВ ==========
 
 def check_owner():
