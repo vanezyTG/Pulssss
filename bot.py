@@ -1370,6 +1370,21 @@ async def rules_broadcast_task():
             logger.error(f"❌ Ошибка в фоновой задаче: {e}")
         await asyncio.sleep(60)
 
+def pm_only():
+    """Декоратор: команда работает только в ЛС (личных сообщениях)"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(message: Message, *args, **kwargs):
+            if message.chat.type != types.ChatType.PRIVATE:
+                try:
+                    await message.reply(TEXTS['pm_only'])
+                except Exception:
+                    pass  # если не удалось отправить — просто молчим
+                return
+            return await func(message, *args, **kwargs)
+        return wrapper
+    return decorator
+
 # ========== КОМАНДЫ ==========
 @dp.message(CommandStart())
 @pm_only()
