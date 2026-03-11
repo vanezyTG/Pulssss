@@ -36,8 +36,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ========== КОНФИГУРАЦИЯ ==========
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
-BOT_USERNAME = "YOUR_BOT_USERNAME_HERE"
+BOT_TOKEN = "8557190026:AAHvuKIR0yGUWnruUap0Qw4bwAmlQtOKM-c"
+BOT_USERNAME = "PulsOfficialManager_bot"
 ADMIN_IDS = [6708209142]  # Ваш ID
 
 # Максимальное количество триггеров
