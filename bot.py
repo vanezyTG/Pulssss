@@ -13,6 +13,7 @@ import threading
 import os
 import shutil
 import re
+import html
 
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.client.default import DefaultBotProperties
@@ -54,8 +55,8 @@ mention_control = defaultdict(lambda: deque(maxlen=50))
 
 # Хранилище для антифлуда кнопок
 button_flood_control = defaultdict(lambda: deque(maxlen=10))
-MAX_BUTTON_CLICKS = 3  # Максимум нажатий на кнопку
-BUTTON_WINDOW = 60  # За 60 секунд
+MAX_BUTTON_CLICKS = 3
+BUTTON_WINDOW = 60
 
 # Блокировка для статистики
 stats_lock = threading.Lock()
@@ -72,7 +73,6 @@ dp = Dispatcher(storage=storage)
 
 # ========== ДЕКОРАТОРЫ ==========
 def check_owner():
-    """Проверяет, что кнопку нажал тот же пользователь, который вызвал команду"""
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
@@ -82,19 +82,7 @@ def check_owner():
                 data = await state.get_data()
                 msg_owner = data.get(f"msg_owner_{callback.message.message_id}")
                 if msg_owner and msg_owner != user_id:
-                    # Логируем попытку чужого нажатия
                     logger.info(f"⚠️ Чужой пользователь {callback.from_user.full_name} ({user_id}) пытался нажать кнопку владельца")
-                    
-                    # Отправляем уведомление в чат
-                    if callback.message.chat.type in ['group', 'supergroup']:
-                        try:
-                            await bot.send_message(
-                                callback.message.chat.id,
-                                f"⚠️ {callback.from_user.full_name} пытался нажать чужую кнопку!"
-                            )
-                        except:
-                            pass
-                    
                     await callback.answer("⚠️ Эта кнопка только для того, кто вызвал команду!", show_alert=True)
                     return
             return await func(callback, *args, **kwargs)
@@ -102,35 +90,20 @@ def check_owner():
     return decorator
 
 def check_public():
-    """Публичные кнопки - может нажимать кто угодно"""
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
-            # Логируем нажатие публичной кнопки
             logger.info(f"👤 Пользователь {callback.from_user.full_name} ({callback.from_user.id}) нажал кнопку: {callback.data}")
-            
-            # Отправляем уведомление в чат о действии (если это группа)
-            if callback.message.chat.type in ['group', 'supergroup']:
-                try:
-                    await bot.send_message(
-                        callback.message.chat.id,
-                        f"👤 {callback.from_user.full_name} нажал кнопку: {callback.data}",
-                        disable_notification=True
-                    )
-                except:
-                    pass
-            
             return await func(callback, *args, **kwargs)
         return wrapper
     return decorator
 
 def check_bot_admin():
-    """Проверяет, что пользователь является админом бота"""
     def decorator(func):
         @wraps(func)
         async def wrapper(message: Message, *args, **kwargs):
             if message.from_user.id not in ADMIN_IDS:
-                logger.warning(f"⚠️ Неавторизованный доступ: {message.from_user.full_name} ({message.from_user.id}) попытался использовать админ-команду")
+                logger.warning(f"⚠️ Неавторизованный доступ: {message.from_user.full_name} ({message.from_user.id})")
                 await message.answer("❌ Эта команда доступна только администраторам бота!")
                 return
             return await func(message, *args, **kwargs)
@@ -138,33 +111,28 @@ def check_bot_admin():
     return decorator
 
 def group_only():
-    """Проверяет, что команда вызвана в группе"""
     def decorator(func):
         @wraps(func)
         async def wrapper(message: Message, *args, **kwargs):
             if message.chat.type == 'private':
                 await message.answer("❌ Эта команда работает только в группах!")
                 return
-            logger.info(f"👥 Команда {message.text} вызвана в группе {message.chat.title} пользователем {message.from_user.full_name}")
             return await func(message, *args, **kwargs)
         return wrapper
     return decorator
 
 def pm_only():
-    """Проверяет, что команда вызвана в личных сообщениях"""
     def decorator(func):
         @wraps(func)
         async def wrapper(message: Message, *args, **kwargs):
             if message.chat.type != 'private':
                 await message.answer("❌ Эта команда работает только в личных сообщениях!")
                 return
-            logger.info(f"💬 Команда {message.text} вызвана в ЛС пользователем {message.from_user.full_name}")
             return await func(message, *args, **kwargs)
         return wrapper
     return decorator
 
 def anti_button_flood():
-    """Антифлуд для кнопок - максимум 3 нажатия за минуту"""
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
@@ -172,23 +140,18 @@ def anti_button_flood():
             button_data = callback.data
             now = time.time()
             
-            # Ключ для антифлуда
             key = f"{user_id}_{button_data}"
             
-            # Очищаем старые записи
             while button_flood_control[key] and now - button_flood_control[key][0] > BUTTON_WINDOW:
                 button_flood_control[key].popleft()
             
-            # Проверяем количество нажатий
             if len(button_flood_control[key]) >= MAX_BUTTON_CLICKS:
                 wait_time = int(BUTTON_WINDOW - (now - button_flood_control[key][0]))
-                logger.warning(f"🚫 Флуд кнопками: {callback.from_user.full_name} на кнопке {button_data}")
+                logger.warning(f"🚫 Флуд кнопками: {callback.from_user.full_name}")
                 await callback.answer(f"⚠️ Не флуди! Подожди {wait_time} сек.", show_alert=True)
                 return
             
-            # Добавляем нажатие
             button_flood_control[key].append(now)
-            
             return await func(callback, *args, **kwargs)
         return wrapper
     return decorator
@@ -198,7 +161,6 @@ def generate_user_id() -> str:
     return ''.join(random.choices(string.digits, k=9))
 
 def get_message_type(message: Message) -> str:
-    """Определяет тип сообщения"""
     if message.text:
         return 'text'
     elif message.photo:
@@ -288,7 +250,6 @@ async def add_premium_reaction(message: Message, emoji: str = "⭐"):
         pass
 
 def parse_duration(duration_str: str) -> int:
-    """Парсит строку длительности в секунды"""
     duration_str = duration_str.lower().strip()
     total_seconds = 0
     
@@ -310,7 +271,6 @@ def parse_duration(duration_str: str) -> int:
     return total_seconds if total_seconds > 0 else 0
 
 def format_duration_full(seconds: int) -> str:
-    """Форматирует секунды в читаемый вид"""
     if seconds <= 0:
         return "навсегда"
     
@@ -330,6 +290,11 @@ def format_duration_full(seconds: int) -> str:
         parts.append(f"{secs} сек")
     
     return " ".join(parts)
+
+def safe_html(text: str) -> str:
+    if not text:
+        return ""
+    return html.escape(text)
 
 # ========== ТЕКСТЫ ==========
 DEFAULT_RULES = """
@@ -506,7 +471,6 @@ class Database:
                           send_messages INTEGER DEFAULT 0,
                           UNIQUE(source_chat_id, log_group_id))''')
             
-            # Таблица для логов нажатий на кнопки
             c.execute('''CREATE TABLE IF NOT EXISTS button_logs
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           user_id INTEGER,
@@ -517,9 +481,7 @@ class Database:
             
             conn.commit()
     
-    # ========== МЕТОДЫ ДЛЯ ЛОГИРОВАНИЯ КНОПОК ==========
     def log_button_click(self, user_id, user_name, chat_id, button_data):
-        """Логирует нажатие на кнопку"""
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute('''INSERT INTO button_logs (user_id, user_name, chat_id, button_data, timestamp)
@@ -527,16 +489,6 @@ class Database:
                      (user_id, user_name, chat_id, button_data, int(time.time())))
             conn.commit()
     
-    def get_button_logs(self, chat_id, limit=20):
-        """Получает логи нажатий на кнопки"""
-        with self.get_connection() as conn:
-            c = conn.cursor()
-            c.execute('''SELECT user_name, button_data, timestamp FROM button_logs 
-                         WHERE chat_id = ? ORDER BY timestamp DESC LIMIT ?''',
-                     (chat_id, limit))
-            return c.fetchall()
-    
-    # ========== МЕТОДЫ ДЛЯ МОДЕРАТОРОВ ==========
     def get_moderator_permissions(self, chat_id, user_id):
         with self.get_connection() as conn:
             c = conn.cursor()
@@ -613,7 +565,6 @@ class Database:
                      (chat_id, limit))
             return c.fetchall()
     
-    # ========== МЕТОДЫ ДЛЯ ГРУПП ЛОГОВ ==========
     def create_log_group(self, log_group_id, owner_id, group_title):
         with self.get_connection() as conn:
             c = conn.cursor()
@@ -682,7 +633,6 @@ class Database:
             c.execute('DELETE FROM log_group_settings WHERE source_chat_id = ?', (source_chat_id,))
             conn.commit()
     
-    # ========== ОСТАЛЬНЫЕ МЕТОДЫ ==========
     def save_rules(self, chat_id, rules_html=None, owner_id=None, chat_title=None, chat_username=None):
         with self.get_connection() as conn:
             c = conn.cursor()
@@ -1198,7 +1148,6 @@ async def is_admin(chat_id, user_id):
         return False
 
 async def check_moderator_permission(chat_id, user_id, permission):
-    """Проверить, есть ли у пользователя право"""
     if await is_creator(chat_id, user_id):
         return True
     perms = db.get_moderator_permissions(chat_id, user_id)
@@ -1227,7 +1176,6 @@ def get_premium_status_emoji(is_premium: bool) -> str:
     return "⭐" if is_premium else ""
 
 async def send_to_log_group(source_chat_id, event_type, data):
-    """Отправить событие в привязанную группу логов"""
     log_group_info = db.get_source_chat_log_group(source_chat_id)
     if not log_group_info:
         return False
@@ -1260,7 +1208,9 @@ async def send_to_log_group(source_chat_id, event_type, data):
         return False
 
 # ========== КЛАВИАТУРЫ ==========
-def create_button(text: str, callback_data: str):
+def create_button(text: str, callback_data: str, color: str = None):
+    if color:
+        return InlineKeyboardButton(text=text, callback_data=callback_data, color=color)
     return InlineKeyboardButton(text=text, callback_data=callback_data)
 
 def get_back_keyboard(callback_data):
@@ -1271,84 +1221,76 @@ def get_back_keyboard(callback_data):
 def get_main_keyboard(is_group: bool = False, is_admin: bool = False):
     builder = InlineKeyboardBuilder()
     
-    if is_group:
-        builder.add(create_button("ℹ️ О боте", "about"))
-        builder.add(create_button("🆘 Помощь", "help"))
-        builder.add(create_button("⚙️ Управление", "group_manage_group"))
-        builder.add(create_button("📜 Правила", "show_rules_group"))
-        builder.add(create_button("📊 Статистика", "my_stats_group"))
-        builder.add(create_button("🏆 Топ", "top_active_group"))
-        builder.add(create_button("🛡️ Модерация", "moderation_actions"))
-        builder.adjust(2)
-    else:
-        builder.add(create_button("ℹ️ О боте", "about"))
-        builder.add(create_button("🆘 Помощь", "help"))
-        builder.add(create_button("➕ Добавить в группу", f"add_to_group_{BOT_USERNAME}"))
-        builder.add(create_button("⚙️ Настройки групп", "group_manage_main"))
-        
-        if is_admin:
-            builder.add(create_button("👑 Админ панель", "admin_panel"))
-        
-        builder.adjust(2)
+    # ОДИНАКОВОЕ МЕНЮ ДЛЯ ГРУПП И ЛС (кроме админ панели)
+    builder.add(create_button("ℹ️ О боте", "about", "primary"))
+    builder.add(create_button("🆘 Помощь", "help", "danger"))
+    builder.add(create_button("➕ Добавить в группу", f"add_to_group_{BOT_USERNAME}", "success"))
+    builder.add(create_button("⚙️ Настройки групп", "group_manage_main", "primary"))
     
+    if is_admin:
+        builder.add(create_button("👑 Админ панель", "admin_panel", "danger"))
+    
+    builder.adjust(2)
     return builder.as_markup()
 
 def get_group_main_keyboard():
+    """Клавиатура для группы (такая же как главная)"""
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("ℹ️ О боте", "about"))
-    builder.add(create_button("🆘 Помощь", "help"))
-    builder.add(create_button("⚙️ Управление", "group_manage_group"))
-    builder.add(create_button("📜 Правила", "show_rules_group"))
-    builder.add(create_button("📊 Статистика", "my_stats_group"))
-    builder.add(create_button("🏆 Топ", "top_active_group"))
-    builder.add(create_button("🛡️ Модерация", "moderation_actions"))
+    builder.add(create_button("ℹ️ О боте", "about", "primary"))
+    builder.add(create_button("🆘 Помощь", "help", "danger"))
+    builder.add(create_button("➕ Добавить в группу", f"add_to_group_{BOT_USERNAME}", "success"))
+    builder.add(create_button("⚙️ Настройки групп", "group_manage_main", "primary"))
+    builder.add(create_button("📜 Правила", "show_rules_group", "secondary"))
+    builder.add(create_button("📊 Статистика", "my_stats_group", "secondary"))
+    builder.add(create_button("🏆 Топ", "top_active_group", "secondary"))
+    builder.add(create_button("🛡️ Модерация", "moderation_actions", "secondary"))
     builder.adjust(2)
     return builder.as_markup()
 
 def get_group_manage_keyboard():
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("📝 Правила", "manage_rules"))
-    builder.add(create_button("👋 Приветствие", "manage_welcome"))
-    builder.add(create_button("🔄 Авто-рассылка", "rules_auto"))
-    builder.add(create_button("🚫 Антифлуд", "antiflood_manage"))
-    builder.add(create_button("📋 Группа логов", "log_group_manage"))
-    builder.add(create_button("🤖 Автоответчик", "auto_response_manage"))
-    builder.add(create_button("🔗 Ссылки", "links_manage"))
-    builder.add(create_button("✅ Подтверждение", "confirmation_manage"))
-    builder.add(create_button("🛡️ Модераторы", "moderators_manage"))
-    builder.add(create_button("❌ Отвязать", "unlink_group_confirm"))
-    builder.add(create_button("◀️ Назад", "back_to_groups"))
+    builder.add(create_button("📝 Правила", "manage_rules", "primary"))
+    builder.add(create_button("👋 Приветствие", "manage_welcome", "secondary"))
+    builder.add(create_button("🔄 Авто-рассылка", "rules_auto", "secondary"))
+    builder.add(create_button("🚫 Антифлуд", "antiflood_manage", "primary"))
+    builder.add(create_button("📋 Группа логов", "log_group_manage", "secondary"))
+    builder.add(create_button("🤖 Автоответчик", "auto_response_manage", "success"))
+    builder.add(create_button("🔗 Ссылки", "links_manage", "secondary"))
+    builder.add(create_button("✅ Подтверждение", "confirmation_manage", "primary"))
+    builder.add(create_button("🛡️ Модераторы", "moderators_manage", "primary"))
+    builder.add(create_button("❌ Отвязать", "unlink_group_confirm", "danger"))
+    builder.add(create_button("◀️ Назад", "back_to_groups", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_moderation_actions_keyboard():
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🔇 Замутить", "mod_mute"))
-    builder.add(create_button("👢 Кикнуть", "mod_kick"))
-    builder.add(create_button("⛔ Забанить", "mod_ban"))
-    builder.add(create_button("⚠️ Предупредить", "mod_warn"))
-    builder.add(create_button("📋 Логи", "mod_logs"))
-    builder.add(create_button("◀️ Назад", "back_to_main"))
+    builder.add(create_button("🔇 Замутить", "mod_mute", "primary"))
+    builder.add(create_button("👢 Кикнуть", "mod_kick", "danger"))
+    builder.add(create_button("⛔ Забанить", "mod_ban", "danger"))
+    builder.add(create_button("⚠️ Предупредить", "mod_warn", "secondary"))
+    builder.add(create_button("📋 Логи", "mod_logs", "secondary"))
+    builder.add(create_button("◀️ Назад", "back_to_main", "secondary"))
     builder.adjust(2)
     return builder.as_markup()
 
 def get_moderators_manage_keyboard(moderators):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("➕ Дать права", "give_mod_rights"))
+    builder.add(create_button("➕ Дать права", "give_mod_rights", "success"))
     if moderators:
-        builder.add(create_button("❌ Забрать права", "remove_mod_rights"))
-    builder.add(create_button("👁 Список", "list_moderators"))
-    builder.add(create_button("◀️ Назад", "group_manage"))
+        builder.add(create_button("❌ Забрать права", "remove_mod_rights", "danger"))
+    builder.add(create_button("👁 Список", "list_moderators", "secondary"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_mod_rights_keyboard(user_id):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🔇 Право мутить", f"give_mute_{user_id}"))
-    builder.add(create_button("👢 Право кикать", f"give_kick_{user_id}"))
-    builder.add(create_button("⛔ Право банить", f"give_ban_{user_id}"))
-    builder.add(create_button("⚠️ Право варнить", f"give_warn_{user_id}"))
-    builder.add(create_button("◀️ Назад", "moderators_manage"))
+    builder.add(create_button("🔇 Право мутить", f"give_mute_{user_id}", "primary"))
+    builder.add(create_button("👢 Право кикать", f"give_kick_{user_id}", "danger"))
+    builder.add(create_button("⛔ Право банить", f"give_ban_{user_id}", "danger"))
+    builder.add(create_button("⚠️ Право варнить", f"give_warn_{user_id}", "secondary"))
+    builder.add(create_button("◀️ Назад", "moderators_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -1356,14 +1298,14 @@ def get_log_group_manage_keyboard(has_log_group, log_group_info=None):
     builder = InlineKeyboardBuilder()
     
     if has_log_group and log_group_info:
-        builder.add(create_button("📊 Настройки логов", "log_group_settings"))
-        builder.add(create_button("🔄 Отвязать", "unlink_log_group"))
-        builder.add(create_button("👁 Инфо", "log_group_info"))
+        builder.add(create_button("📊 Настройки логов", "log_group_settings", "primary"))
+        builder.add(create_button("🔄 Отвязать", "unlink_log_group", "danger"))
+        builder.add(create_button("👁 Инфо", "log_group_info", "secondary"))
     else:
-        builder.add(create_button("➕ Привязать группу логов", "link_log_group"))
-        builder.add(create_button("ℹ️ Как создать", "log_group_help"))
+        builder.add(create_button("➕ Привязать группу логов", "link_log_group", "success"))
+        builder.add(create_button("ℹ️ Как создать", "log_group_help", "secondary"))
     
-    builder.add(create_button("◀️ Назад", "group_manage"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -1376,114 +1318,118 @@ def get_log_settings_keyboard(settings):
     status_leaves = "✅" if settings.get('send_leaves', 0) else "❌"
     status_messages = "✅" if settings.get('send_messages', 0) else "❌"
     
-    builder.add(create_button(f"{status_violations} Нарушения", "toggle_log_violations"))
-    builder.add(create_button(f"{status_mod} Действия модераторов", "toggle_log_mod"))
-    builder.add(create_button(f"{status_joins} Входы", "toggle_log_joins"))
-    builder.add(create_button(f"{status_leaves} Выходы", "toggle_log_leaves"))
-    builder.add(create_button(f"{status_messages} Сообщения", "toggle_log_messages"))
-    builder.add(create_button("◀️ Назад", "log_group_manage"))
+    builder.add(create_button(f"{status_violations} Нарушения", "toggle_log_violations", "secondary"))
+    builder.add(create_button(f"{status_mod} Действия модераторов", "toggle_log_mod", "secondary"))
+    builder.add(create_button(f"{status_joins} Входы", "toggle_log_joins", "secondary"))
+    builder.add(create_button(f"{status_leaves} Выходы", "toggle_log_leaves", "secondary"))
+    builder.add(create_button(f"{status_messages} Сообщения", "toggle_log_messages", "secondary"))
+    builder.add(create_button("◀️ Назад", "log_group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_rules_manage_keyboard(has_rules, rules_enabled):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("📝 Установить", "set_rules"))
-    builder.add(create_button("📋 Готовые", "set_default_rules"))
+    builder.add(create_button("📝 Установить", "set_rules", "success"))
+    builder.add(create_button("📋 Готовые", "set_default_rules", "primary"))
     if has_rules:
-        builder.add(create_button("👁 Посмотреть", "show_rules"))
-        builder.add(create_button("✏️ Изменить", "edit_rules"))
-        builder.add(create_button("🗑 Удалить", "delete_rules_confirm"))
+        builder.add(create_button("👁 Посмотреть", "show_rules", "secondary"))
+        builder.add(create_button("✏️ Изменить", "edit_rules", "secondary"))
+        builder.add(create_button("🗑 Удалить", "delete_rules_confirm", "danger"))
         status_text = "✅ Включить" if not rules_enabled else "❌ Выключить"
-        builder.add(create_button(status_text, "toggle_rules"))
-    builder.add(create_button("◀️ Назад", "group_manage"))
+        status_color = "success" if not rules_enabled else "danger"
+        builder.add(create_button(status_text, "toggle_rules", status_color))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_welcome_manage_keyboard(enabled=False):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button(f"{'❌ Выключить' if enabled else '✅ Включить'}", "toggle_welcome"))
-    builder.add(create_button("📝 Текст", "set_welcome_text"))
-    builder.add(create_button("🖼 Фото", "set_welcome_photo"))
-    builder.add(create_button("👁 Посмотреть", "show_welcome"))
-    builder.add(create_button("◀️ Назад", "group_manage"))
+    toggle_color = "danger" if enabled else "success"
+    builder.add(create_button(f"{'❌ Выключить' if enabled else '✅ Включить'}", "toggle_welcome", toggle_color))
+    builder.add(create_button("📝 Текст", "set_welcome_text", "primary"))
+    builder.add(create_button("🖼 Фото", "set_welcome_photo", "primary"))
+    builder.add(create_button("👁 Посмотреть", "show_welcome", "secondary"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_rules_auto_keyboard(enabled):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button(f"{'❌ Выключить' if enabled else '✅ Включить'}", "toggle_rules_auto"))
-    builder.add(create_button("⏱ Интервал", "set_interval"))
-    builder.add(create_button("◀️ Назад", "group_manage"))
+    toggle_color = "danger" if enabled else "success"
+    builder.add(create_button(f"{'❌ Выключить' if enabled else '✅ Включить'}", "toggle_rules_auto", toggle_color))
+    builder.add(create_button("⏱ Интервал", "set_interval", "primary"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_antiflood_manage_keyboard(settings):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button(f"{'❌ Выключить' if settings['enabled'] else '✅ Включить'}", "toggle_antiflood"))
-    builder.add(create_button(f"📝 Текст: {settings['msg_limit']}", "set_msg_limit"))
-    builder.add(create_button(f"🎬 Медиа: {settings['media_limit']}", "set_media_limit"))
-    builder.add(create_button(f"⏱ Окно: {settings['time_window']} сек", "set_window"))
-    builder.add(create_button(f"⚠️ Предупреждений: {settings['warn_count']}", "set_warn_count"))
-    builder.add(create_button(f"🔇 Первое: {settings['first_punish']}", "set_first_punish"))
-    builder.add(create_button(f"🔊 Повторное: {settings['repeat_punish']}", "set_repeat_punish"))
-    builder.add(create_button(f"⚠️ После варнов: {settings['punish_after_warn']}", "set_punish_after_warn"))
-    builder.add(create_button("◀️ Назад", "group_manage"))
+    toggle_color = "danger" if settings['enabled'] else "success"
+    builder.add(create_button(f"{'❌ Выключить' if settings['enabled'] else '✅ Включить'}", "toggle_antiflood", toggle_color))
+    builder.add(create_button(f"📝 Текст: {settings['msg_limit']}", "set_msg_limit", "secondary"))
+    builder.add(create_button(f"🎬 Медиа: {settings['media_limit']}", "set_media_limit", "secondary"))
+    builder.add(create_button(f"⏱ Окно: {settings['time_window']} сек", "set_window", "secondary"))
+    builder.add(create_button(f"⚠️ Предупреждений: {settings['warn_count']}", "set_warn_count", "secondary"))
+    builder.add(create_button("🔇 Первое наказание", "set_first_punish", "primary"))
+    builder.add(create_button("🔊 Повторное", "set_repeat_punish", "primary"))
+    builder.add(create_button("⚠️ После варнов", "set_punish_after_warn", "primary"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_punish_type_keyboard(punish_type="first"):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("⚠️ Warn", f"punish_warn_{punish_type}"))
-    builder.add(create_button("🔇 Мут", f"punish_mute_{punish_type}"))
-    builder.add(create_button("👢 Кик", f"punish_kick_{punish_type}"))
-    builder.add(create_button("⛔️ Бан", f"punish_ban_{punish_type}"))
-    builder.add(create_button("◀️ Назад", "antiflood_manage"))
+    builder.add(create_button("⚠️ Warn", f"punish_warn_{punish_type}", "secondary"))
+    builder.add(create_button("🔇 Мут", f"punish_mute_{punish_type}", "primary"))
+    builder.add(create_button("👢 Кик", f"punish_kick_{punish_type}", "danger"))
+    builder.add(create_button("⛔️ Бан", f"punish_ban_{punish_type}", "danger"))
+    builder.add(create_button("◀️ Назад", "antiflood_manage", "secondary"))
     builder.adjust(2)
     return builder.as_markup()
 
 def get_welcome_buttons(chat_id):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("📜 Правила", f"show_group_rules_{chat_id}"))
-    builder.add(create_button("📊 Моя статистика", f"my_stats_{chat_id}"))
-    builder.add(create_button("🏆 Топ", f"top_active_{chat_id}"))
+    builder.add(create_button("📜 Правила", f"show_group_rules_{chat_id}", "primary"))
+    builder.add(create_button("📊 Моя статистика", f"my_stats_{chat_id}", "secondary"))
+    builder.add(create_button("🏆 Топ", f"top_active_{chat_id}", "success"))
     builder.adjust(2)
     return builder.as_markup()
 
 def get_confirm_not_bot_keyboard(chat_id, user_id, msg_id):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Я не бот", f"confirm_not_bot_{chat_id}_{user_id}_{msg_id}"))
+    builder.add(create_button("✅ Я не бот", f"confirm_not_bot_{chat_id}_{user_id}_{msg_id}", "success"))
     return builder.as_markup()
 
 def get_rules_agree_keyboard(chat_id, user_id, msg_id):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Согласен", f"agree_rules_{chat_id}_{user_id}_{msg_id}"))
+    builder.add(create_button("✅ Согласен", f"agree_rules_{chat_id}_{user_id}_{msg_id}", "success"))
     return builder.as_markup()
 
 def get_link_group_keyboard(chat_id):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Привязать", f"link_group_{chat_id}"))
-    builder.add(create_button("🚫 Отмена", "cancel_link"))
+    builder.add(create_button("✅ Привязать", f"link_group_{chat_id}", "success"))
+    builder.add(create_button("🚫 Отмена", "cancel_link", "danger"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_unlink_confirm_keyboard(chat_id):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("❌ Отвязать", f"unlink_group_{chat_id}"))
-    builder.add(create_button("🚫 Отмена", "group_manage"))
+    builder.add(create_button("❌ Отвязать", f"unlink_group_{chat_id}", "danger"))
+    builder.add(create_button("🚫 Отмена", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_pm_link_keyboard():
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("💬 Перейти в ЛС", "go_to_pm"))
+    builder.add(create_button("💬 Перейти в ЛС", "go_to_pm", "primary"))
     return builder.as_markup()
 
 def get_auto_response_keyboard(responses):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("➕ Добавить", "add_auto_trigger"))
+    builder.add(create_button("➕ Добавить", "add_auto_trigger", "success"))
     if responses:
-        builder.add(create_button("🗑 Удалить", "remove_auto_trigger"))
-    builder.add(create_button("◀️ Назад", "group_manage"))
+        builder.add(create_button("🗑 Удалить", "remove_auto_trigger", "danger"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -1491,28 +1437,29 @@ def get_auto_response_remove_keyboard(responses):
     builder = InlineKeyboardBuilder()
     for i, (trigger, _, _, _) in enumerate(responses):
         short = trigger[:15] + "..." if len(trigger) > 15 else trigger
-        builder.add(create_button(short, f"rem_trig_{i}"))
-    builder.add(create_button("◀️ Назад", "auto_response_manage"))
+        builder.add(create_button(short, f"rem_trig_{i}", "danger"))
+    builder.add(create_button("◀️ Назад", "auto_response_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_links_manage_keyboard(settings):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button(f"{'❌ Выключить' if settings['links_enabled'] else '✅ Включить'}", "toggle_links"))
-    builder.add(create_button(f"Наказание: {settings['links_punish']}", "set_links_punish"))
-    builder.add(create_button(f"Макс: {settings['max_mentions']}", "set_max_mentions"))
-    builder.add(create_button(f"Окно: {settings['mention_window']} сек", "set_mention_window"))
-    builder.add(create_button("◀️ Назад", "group_manage"))
+    toggle_color = "danger" if settings['links_enabled'] else "success"
+    builder.add(create_button(f"{'❌ Выключить' if settings['links_enabled'] else '✅ Включить'}", "toggle_links", toggle_color))
+    builder.add(create_button("Наказание", "set_links_punish", "primary"))
+    builder.add(create_button(f"Макс: {settings['max_mentions']}", "set_max_mentions", "secondary"))
+    builder.add(create_button(f"Окно: {settings['mention_window']} сек", "set_mention_window", "secondary"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
 def get_links_punish_keyboard():
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("⚠️ Warn", "links_punish_warn"))
-    builder.add(create_button("🔇 Мут", "links_punish_mute"))
-    builder.add(create_button("👢 Кик", "links_punish_kick"))
-    builder.add(create_button("⛔️ Бан", "links_punish_ban"))
-    builder.add(create_button("◀️ Назад", "links_manage"))
+    builder.add(create_button("⚠️ Warn", "links_punish_warn", "secondary"))
+    builder.add(create_button("🔇 Мут", "links_punish_mute", "primary"))
+    builder.add(create_button("👢 Кик", "links_punish_kick", "danger"))
+    builder.add(create_button("⛔️ Бан", "links_punish_ban", "danger"))
+    builder.add(create_button("◀️ Назад", "links_manage", "secondary"))
     builder.adjust(2)
     return builder.as_markup()
 
@@ -1522,28 +1469,28 @@ def get_confirmation_keyboard(current_type, has_rules):
     disabled = "🚫 Отключено"
     if current_type == 'disabled':
         disabled += " ✅"
-    builder.add(create_button(disabled, "confirmation_disabled"))
+    builder.add(create_button(disabled, "confirmation_disabled", "secondary"))
     
     not_bot = "🤖 Только не бот"
     if current_type == 'not_bot':
         not_bot += " ✅"
-    builder.add(create_button(not_bot, "confirmation_not_bot"))
+    builder.add(create_button(not_bot, "confirmation_not_bot", "primary"))
     
     rules = "📜 Только правила"
     if not has_rules:
         rules = "❌ " + rules
     elif current_type == 'rules':
         rules += " ✅"
-    builder.add(create_button(rules, "confirmation_rules" if has_rules else "confirmation_disabled"))
+    builder.add(create_button(rules, "confirmation_rules" if has_rules else "confirmation_disabled", "success" if has_rules else "secondary"))
     
     both = "2️⃣ Оба шага"
     if not has_rules:
         both = "❌ " + both
     elif current_type == 'both':
         both += " ✅"
-    builder.add(create_button(both, "confirmation_both" if has_rules else "confirmation_disabled"))
+    builder.add(create_button(both, "confirmation_both" if has_rules else "confirmation_disabled", "success" if has_rules else "secondary"))
     
-    builder.add(create_button("◀️ Назад", "group_manage"))
+    builder.add(create_button("◀️ Назад", "group_manage", "secondary"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -1645,8 +1592,8 @@ class AntiFloodMiddleware(BaseMiddleware):
         
         log_text = (
             f"<b>🚫 Нарушение</b>\n\n"
-            f"Пользователь: {user.full_name}\n"
-            f"Причина: {reason}\n"
+            f"Пользователь: {safe_html(user.full_name)}\n"
+            f"Причина: {safe_html(reason)}\n"
             f"Наказание: {punish_type}\n"
             f"Длительность: {format_interval(duration) if duration > 0 else 'навсегда'}\n"
             f"<a href='{message_link}'>Сообщение</a>"
@@ -1747,45 +1694,48 @@ async def rules_broadcast_task():
 
 # ========== КОМАНДЫ ==========
 @dp.message(CommandStart())
-@pm_only()
-async def cmd_start_pm(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext):
+    """Обработчик /start - работает и в группах, и в ЛС"""
     await state.clear()
     await state.update_data({f"msg_owner_{message.message_id}": message.from_user.id})
     
     is_premium = getattr(message.from_user, 'is_premium', False)
+    is_admin = message.from_user.id in ADMIN_IDS
+    
+    # Разное приветствие для групп и ЛС
+    if message.chat.type == 'private':
+        welcome_text = (
+            "👋 <b>Добро пожаловать в Puls Chat Manager!</b>\n\n"
+            "Я помогу вам управлять чатами, следить за порядком и автоматизировать модерацию.\n\n"
+            "Выберите раздел в меню ниже 👇"
+        )
+    else:
+        welcome_text = (
+            "👋 <b>Puls Chat Manager</b>\n\n"
+            "• /rules - Правила\n"
+            "• /stats - Моя статистика\n"
+            "• /top - Топ активных\n"
+            "• /profile - Профиль пользователя\n"
+            "• /group - Управление группой\n"
+            "• /puls - Проверка пинга\n"
+            "• /mute - Замутить пользователя\n"
+            "• /ban - Забанить пользователя\n"
+            "• /kick - Кикнуть пользователя\n"
+            "• /warn - Предупредить пользователя\n"
+            "• /mods - Список модераторов"
+        )
     
     await message.answer(
-        "👋 <b>Добро пожаловать в Puls Chat Manager!</b>\n\n"
-        "Я помогу вам управлять чатами, следить за порядком и автоматизировать модерацию.\n\n"
-        "Выберите раздел в меню ниже 👇",
-        reply_markup=get_main_keyboard(is_group=False, is_admin=message.from_user.id in ADMIN_IDS)
-    )
-    await add_premium_reaction(message, "⭐")
-
-@dp.message(Command("start"))
-@group_only()
-async def cmd_start_group(message: Message):
-    await message.reply(
-        "👋 <b>Puls Chat Manager</b>\n\n"
-        "• /rules - Правила\n"
-        "• /stats - Моя статистика\n"
-        "• /top - Топ активных\n"
-        "• /profile - Профиль пользователя\n"
-        "• /group - Управление группой\n"
-        "• /puls - Проверка пинга\n"
-        "• /mute - Замутить пользователя\n"
-        "• /ban - Забанить пользователя\n"
-        "• /kick - Кикнуть пользователя\n"
-        "• /warn - Предупредить пользователя\n"
-        "• /mods - Список модераторов",
-        reply_markup=get_group_main_keyboard(),
+        welcome_text,
+        reply_markup=get_main_keyboard(is_group=message.chat.type != 'private', is_admin=is_admin),
         parse_mode="HTML"
     )
-    await add_premium_reaction(message, "👋")
+    await add_premium_reaction(message, "⭐")
 
 @dp.message(Command("groupsettings"))
 @pm_only()
 async def cmd_group_settings(message: Message, state: FSMContext):
+    """Открывает управление группами"""
     await state.clear()
     groups = db.get_user_groups(message.from_user.id)
     
@@ -1798,8 +1748,8 @@ async def cmd_group_settings(message: Message, state: FSMContext):
     
     builder = InlineKeyboardBuilder()
     for chat_id, title in groups:
-        builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}"))
-    builder.add(create_button("◀️ Назад", "back_to_main"))
+        builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}", "primary"))
+    builder.add(create_button("◀️ Назад", "back_to_main", "secondary"))
     builder.adjust(1)
     
     await message.answer("📱 <b>Ваши группы</b>\n\nВыберите группу для настройки:", reply_markup=builder.as_markup())
@@ -1841,7 +1791,7 @@ async def cmd_stats(message: Message):
     else:
         premium_emoji = get_premium_status_emoji(global_user_data['is_premium'])
         text = (
-            f"<b>Профиль {premium_emoji} {user.full_name}</b>\n\n"
+            f"<b>Профиль {premium_emoji} {safe_html(user.full_name)}</b>\n\n"
             f"🆔 <b>ID:</b> <code>{global_user_data['global_id']}</code>\n"
             f"📅 <b>Впервые замечен:</b> {format_datetime(global_user_data['first_seen'])}\n"
             f"{'⭐ <b>Премиум пользователь</b>' if global_user_data['is_premium'] else ''}\n\n"
@@ -1885,7 +1835,7 @@ async def cmd_top(message: Message):
             premium_emoji = ""
         
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        text += f"{medal} {premium_emoji} {name} — {count} 💬\n"
+        text += f"{medal} {premium_emoji} {safe_html(name)} — {count} 💬\n"
     
     await message.reply(text, parse_mode="HTML")
     await add_premium_reaction(message, "🏆")
@@ -1918,11 +1868,11 @@ async def cmd_profile(message: Message):
     
     if not stat:
         premium_emoji = get_premium_status_emoji(global_user_data['is_premium'])
-        text = f"<b>Профиль {premium_emoji} {target_user.full_name}</b>\n\nУ пользователя пока нет сообщений в этом чате"
+        text = f"<b>Профиль {premium_emoji} {safe_html(target_user.full_name)}</b>\n\nУ пользователя пока нет сообщений в этом чате"
     else:
         premium_emoji = get_premium_status_emoji(global_user_data['is_premium'])
         text = (
-            f"<b>Профиль {premium_emoji} {target_user.full_name}</b>\n\n"
+            f"<b>Профиль {premium_emoji} {safe_html(target_user.full_name)}</b>\n\n"
             f"🆔 <b>ID:</b> <code>{global_user_data['global_id']}</code>\n"
             f"📅 <b>Впервые замечен:</b> {format_datetime(global_user_data['first_seen'])}\n"
             f"{'⭐ <b>Премиум пользователь</b>' if global_user_data['is_premium'] else ''}\n\n"
@@ -1942,7 +1892,7 @@ async def cmd_profile(message: Message):
 async def cmd_rules(message: Message):
     rules = db.get_rules_html(message.chat.id)
     if rules and db.get_rules_enabled(message.chat.id):
-        await message.reply(f"<b>📢 Правила чата</b>\n\n{rules}", parse_mode="HTML")
+        await message.reply(f"<b>📢 Правила чата</b>\n\n{safe_html(rules)}", parse_mode="HTML")
         await add_premium_reaction(message, "📜")
     else:
         await message.answer("❌ В этом чате ещё не установлены правила")
@@ -1983,7 +1933,6 @@ async def cmd_group(message: Message):
 @dp.message(Command("mute"))
 @group_only()
 async def cmd_mute(message: Message, state: FSMContext):
-    """Замутить пользователя"""
     chat_id = message.chat.id
     user_id = message.from_user.id
     
@@ -2042,10 +1991,10 @@ async def process_mute_reason(message: Message, state: FSMContext):
         duration_text = format_duration_full(duration) if duration > 0 else "навсегда"
         
         await message.answer(
-            f"🔇 <b>Пользователь {target_name} замьючен</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
+            f"🔇 <b>Пользователь {safe_html(target_name)} замьючен</b>\n\n"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
             f"⏱ Длительность: {duration_text}\n"
-            f"📝 Причина: {reason}",
+            f"📝 Причина: {safe_html(reason)}",
             parse_mode="HTML"
         )
         
@@ -2056,10 +2005,10 @@ async def process_mute_reason(message: Message, state: FSMContext):
         
         log_text = (
             f"<b>🔇 Мут</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
-            f"👤 Пользователь: {target_name}\n"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
+            f"👤 Пользователь: {safe_html(target_name)}\n"
             f"⏱ Длительность: {duration_text}\n"
-            f"📝 Причина: {reason}"
+            f"📝 Причина: {safe_html(reason)}"
         )
         await send_to_log_group(chat_id, 'mod_action', log_text)
         
@@ -2071,7 +2020,6 @@ async def process_mute_reason(message: Message, state: FSMContext):
 @dp.message(Command("ban"))
 @group_only()
 async def cmd_ban(message: Message, state: FSMContext):
-    """Забанить пользователя"""
     chat_id = message.chat.id
     user_id = message.from_user.id
     
@@ -2125,10 +2073,10 @@ async def process_ban_reason(message: Message, state: FSMContext):
         duration_text = format_duration_full(duration) if duration > 0 else "навсегда"
         
         await message.answer(
-            f"⛔ <b>Пользователь {target_name} забанен</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
+            f"⛔ <b>Пользователь {safe_html(target_name)} забанен</b>\n\n"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
             f"⏱ Длительность: {duration_text}\n"
-            f"📝 Причина: {reason}",
+            f"📝 Причина: {safe_html(reason)}",
             parse_mode="HTML"
         )
         
@@ -2139,10 +2087,10 @@ async def process_ban_reason(message: Message, state: FSMContext):
         
         log_text = (
             f"<b>⛔ Бан</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
-            f"👤 Пользователь: {target_name}\n"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
+            f"👤 Пользователь: {safe_html(target_name)}\n"
             f"⏱ Длительность: {duration_text}\n"
-            f"📝 Причина: {reason}"
+            f"📝 Причина: {safe_html(reason)}"
         )
         await send_to_log_group(chat_id, 'mod_action', log_text)
         
@@ -2154,7 +2102,6 @@ async def process_ban_reason(message: Message, state: FSMContext):
 @dp.message(Command("kick"))
 @group_only()
 async def cmd_kick(message: Message, state: FSMContext):
-    """Кикнуть пользователя"""
     chat_id = message.chat.id
     user_id = message.from_user.id
     
@@ -2194,9 +2141,9 @@ async def process_kick_reason(message: Message, state: FSMContext):
         await bot.unban_chat_member(chat_id, target_id)
         
         await message.answer(
-            f"👢 <b>Пользователь {target_name} кикнут</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
-            f"📝 Причина: {reason}",
+            f"👢 <b>Пользователь {safe_html(target_name)} кикнут</b>\n\n"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
+            f"📝 Причина: {safe_html(reason)}",
             parse_mode="HTML"
         )
         
@@ -2207,9 +2154,9 @@ async def process_kick_reason(message: Message, state: FSMContext):
         
         log_text = (
             f"<b>👢 Кик</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
-            f"👤 Пользователь: {target_name}\n"
-            f"📝 Причина: {reason}"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
+            f"👤 Пользователь: {safe_html(target_name)}\n"
+            f"📝 Причина: {safe_html(reason)}"
         )
         await send_to_log_group(chat_id, 'mod_action', log_text)
         
@@ -2221,7 +2168,6 @@ async def process_kick_reason(message: Message, state: FSMContext):
 @dp.message(Command("warn"))
 @group_only()
 async def cmd_warn(message: Message, state: FSMContext):
-    """Предупредить пользователя"""
     chat_id = message.chat.id
     user_id = message.from_user.id
     
@@ -2260,10 +2206,10 @@ async def process_warn_reason(message: Message, state: FSMContext):
         warn_count = db.add_user_warn(chat_id, target_id)
         
         await message.answer(
-            f"⚠️ <b>Предупреждение пользователю {target_name}</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
+            f"⚠️ <b>Предупреждение пользователю {safe_html(target_name)}</b>\n\n"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
             f"📊 Всего предупреждений: {warn_count}\n"
-            f"📝 Причина: {reason}",
+            f"📝 Причина: {safe_html(reason)}",
             parse_mode="HTML"
         )
         
@@ -2274,10 +2220,10 @@ async def process_warn_reason(message: Message, state: FSMContext):
         
         log_text = (
             f"<b>⚠️ Предупреждение</b>\n\n"
-            f"👮 Модератор: {moderator.full_name}\n"
-            f"👤 Пользователь: {target_name}\n"
+            f"👮 Модератор: {safe_html(moderator.full_name)}\n"
+            f"👤 Пользователь: {safe_html(target_name)}\n"
             f"📊 Предупреждение №{warn_count}\n"
-            f"📝 Причина: {reason}"
+            f"📝 Причина: {safe_html(reason)}"
         )
         await send_to_log_group(chat_id, 'mod_action', log_text)
         
@@ -2289,7 +2235,6 @@ async def process_warn_reason(message: Message, state: FSMContext):
 @dp.message(Command("mods"))
 @group_only()
 async def cmd_mods(message: Message):
-    """Показать список модераторов"""
     chat_id = message.chat.id
     moderators = db.get_all_moderators(chat_id)
     
@@ -2301,7 +2246,7 @@ async def cmd_mods(message: Message):
     
     try:
         creator = await bot.get_chat_member(chat_id, (await bot.get_chat(chat_id)).id)
-        text += f"👑 <b>Владелец:</b> {creator.user.full_name}\n\n"
+        text += f"👑 <b>Владелец:</b> {safe_html(creator.user.full_name)}\n\n"
     except:
         pass
     
@@ -2319,7 +2264,7 @@ async def cmd_mods(message: Message):
                 if mod[4]: rights.append("⚠️")
                 
                 rights_text = " ".join(rights) if rights else "❌ нет прав"
-                text += f"• {name} - {rights_text}\n"
+                text += f"• {safe_html(name)} - {rights_text}\n"
             except:
                 continue
     
@@ -2329,7 +2274,6 @@ async def cmd_mods(message: Message):
 @dp.message(Command("give_mute"))
 @group_only()
 async def cmd_give_mute(message: Message, state: FSMContext):
-    """Дать право мутить"""
     chat_id = message.chat.id
     user_id = message.from_user.id
     
@@ -2347,19 +2291,18 @@ async def cmd_give_mute(message: Message, state: FSMContext):
         return
     
     db.set_moderator_permission(chat_id, target_user.id, 'can_mute', True, user_id)
-    await message.answer(f"✅ Пользователю {target_user.full_name} выдано право мутить")
+    await message.answer(f"✅ Пользователю {safe_html(target_user.full_name)} выдано право мутить")
     
     log_text = (
         f"<b>🔇 Выдача права на мут</b>\n\n"
-        f"👮 Админ: {message.from_user.full_name}\n"
-        f"👤 Пользователь: {target_user.full_name}"
+        f"👮 Админ: {safe_html(message.from_user.full_name)}\n"
+        f"👤 Пользователь: {safe_html(target_user.full_name)}"
     )
     await send_to_log_group(chat_id, 'mod_action', log_text)
 
 @dp.message(Command("ungive_mute"))
 @group_only()
 async def cmd_ungive_mute(message: Message):
-    """Забрать право мутить"""
     chat_id = message.chat.id
     user_id = message.from_user.id
     
@@ -2373,7 +2316,7 @@ async def cmd_ungive_mute(message: Message):
     
     target_user = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target_user.id, 'can_mute', False, user_id)
-    await message.answer(f"✅ У пользователя {target_user.full_name} забрано право мутить")
+    await message.answer(f"✅ У пользователя {safe_html(target_user.full_name)} забрано право мутить")
 
 @dp.message(Command("give_kick"))
 @group_only()
@@ -2395,7 +2338,7 @@ async def cmd_give_kick(message: Message):
         return
     
     db.set_moderator_permission(chat_id, target_user.id, 'can_kick', True, user_id)
-    await message.answer(f"✅ Пользователю {target_user.full_name} выдано право кикать")
+    await message.answer(f"✅ Пользователю {safe_html(target_user.full_name)} выдано право кикать")
 
 @dp.message(Command("ungive_kick"))
 @group_only()
@@ -2413,7 +2356,7 @@ async def cmd_ungive_kick(message: Message):
     
     target_user = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target_user.id, 'can_kick', False, user_id)
-    await message.answer(f"✅ У пользователя {target_user.full_name} забрано право кикать")
+    await message.answer(f"✅ У пользователя {safe_html(target_user.full_name)} забрано право кикать")
 
 @dp.message(Command("give_ban"))
 @group_only()
@@ -2435,7 +2378,7 @@ async def cmd_give_ban(message: Message):
         return
     
     db.set_moderator_permission(chat_id, target_user.id, 'can_ban', True, user_id)
-    await message.answer(f"✅ Пользователю {target_user.full_name} выдано право банить")
+    await message.answer(f"✅ Пользователю {safe_html(target_user.full_name)} выдано право банить")
 
 @dp.message(Command("ungive_ban"))
 @group_only()
@@ -2453,7 +2396,7 @@ async def cmd_ungive_ban(message: Message):
     
     target_user = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target_user.id, 'can_ban', False, user_id)
-    await message.answer(f"✅ У пользователя {target_user.full_name} забрано право банить")
+    await message.answer(f"✅ У пользователя {safe_html(target_user.full_name)} забрано право банить")
 
 @dp.message(Command("give_warn"))
 @group_only()
@@ -2475,7 +2418,7 @@ async def cmd_give_warn(message: Message):
         return
     
     db.set_moderator_permission(chat_id, target_user.id, 'can_warn', True, user_id)
-    await message.answer(f"✅ Пользователю {target_user.full_name} выдано право выдавать предупреждения")
+    await message.answer(f"✅ Пользователю {safe_html(target_user.full_name)} выдано право выдавать предупреждения")
 
 @dp.message(Command("ungive_warn"))
 @group_only()
@@ -2493,13 +2436,12 @@ async def cmd_ungive_warn(message: Message):
     
     target_user = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target_user.id, 'can_warn', False, user_id)
-    await message.answer(f"✅ У пользователя {target_user.full_name} забрано право выдавать предупреждения")
+    await message.answer(f"✅ У пользователя {safe_html(target_user.full_name)} забрано право выдавать предупреждения")
 
 # ========== КОМАНДЫ ДЛЯ ГРУПП ЛОГОВ ==========
 @dp.message(Command("loggroup"))
 @pm_only()
 async def cmd_loggroup(message: Message, state: FSMContext):
-    """Привязать группу логов"""
     user_id = message.from_user.id
     
     log_groups = db.get_user_log_groups(user_id)
@@ -2517,9 +2459,9 @@ async def cmd_loggroup(message: Message, state: FSMContext):
     
     builder = InlineKeyboardBuilder()
     for log_id, title in log_groups:
-        builder.add(create_button(title or f"Группа {log_id}", f"select_log_group_{log_id}"))
-    builder.add(create_button("➕ Добавить новую", "add_log_group"))
-    builder.add(create_button("◀️ Назад", "back_to_main"))
+        builder.add(create_button(title or f"Группа {log_id}", f"select_log_group_{log_id}", "primary"))
+    builder.add(create_button("➕ Добавить новую", "add_log_group", "success"))
+    builder.add(create_button("◀️ Назад", "back_to_main", "secondary"))
     builder.adjust(1)
     
     await message.answer(
@@ -2530,7 +2472,6 @@ async def cmd_loggroup(message: Message, state: FSMContext):
 
 @dp.message(F.forward_from_chat)
 async def handle_forwarded_chat(message: Message):
-    """Обработка пересланного сообщения из группы"""
     if message.chat.type != 'private':
         return
     
@@ -2560,7 +2501,7 @@ async def handle_forwarded_chat(message: Message):
     
     await message.answer(
         f"✅ <b>Группа логов создана!</b>\n\n"
-        f"Название: {chat.title}\n"
+        f"Название: {safe_html(chat.title)}\n"
         f"ID: <code>{chat.id}</code>\n\n"
         f"Теперь вы можете привязать эту группу к вашим чатам в настройках.",
         parse_mode="HTML"
@@ -2579,8 +2520,8 @@ async def handle_group_message(message: Message):
     if text and len(text) < 500:
         log_text = (
             f"<b>💬 Сообщение</b>\n\n"
-            f"👤 {message.from_user.full_name}\n"
-            f"📝 {text[:200]}{'...' if len(text) > 200 else ''}"
+            f"👤 {safe_html(message.from_user.full_name)}\n"
+            f"📝 {safe_html(text[:200])}{'...' if len(text) > 200 else ''}"
         )
         await send_to_log_group(chat_id, 'message', log_text)
     
@@ -2594,15 +2535,15 @@ async def handle_group_message(message: Message):
             if trigger == cleaned_text or trigger == text.lower():
                 try:
                     if response_type == 'text':
-                        await message.reply(response, parse_mode="HTML", disable_notification=True)
+                        await message.reply(safe_html(response), parse_mode="HTML", disable_notification=True)
                     elif response_type == 'photo' and media_id:
-                        await message.reply_photo(media_id, caption=response, parse_mode="HTML")
+                        await message.reply_photo(media_id, caption=safe_html(response), parse_mode="HTML")
                     elif response_type == 'animation' and media_id:
-                        await message.reply_animation(media_id, caption=response, parse_mode="HTML")
+                        await message.reply_animation(media_id, caption=safe_html(response), parse_mode="HTML")
                     elif response_type == 'sticker' and media_id:
                         await message.reply_sticker(media_id)
                 except:
-                    await message.reply(response, disable_notification=True)
+                    await message.reply(safe_html(response), disable_notification=True)
                 break
         
         else:
@@ -2610,15 +2551,15 @@ async def handle_group_message(message: Message):
                 if trigger in cleaned_text or trigger in text.lower():
                     try:
                         if response_type == 'text':
-                            await message.reply(response, parse_mode="HTML", disable_notification=True)
+                            await message.reply(safe_html(response), parse_mode="HTML", disable_notification=True)
                         elif response_type == 'photo' and media_id:
-                            await message.reply_photo(media_id, caption=response, parse_mode="HTML")
+                            await message.reply_photo(media_id, caption=safe_html(response), parse_mode="HTML")
                         elif response_type == 'animation' and media_id:
-                            await message.reply_animation(media_id, caption=response, parse_mode="HTML")
+                            await message.reply_animation(media_id, caption=safe_html(response), parse_mode="HTML")
                         elif response_type == 'sticker' and media_id:
                             await message.reply_sticker(media_id)
                     except:
-                        await message.reply(response, disable_notification=True)
+                        await message.reply(safe_html(response), disable_notification=True)
                     break
 
 @dp.message(Command("adminstats"))
@@ -2640,9 +2581,9 @@ async def cmd_admin_stats(message: Message):
             
             if username:
                 link = f"https://t.me/{username}"
-                group_info = f"<a href='{link}'>{title or 'Без названия'}</a>"
+                group_info = f"<a href='{link}'>{safe_html(title) or 'Без названия'}</a>"
             else:
-                group_info = title or 'Без названия'
+                group_info = safe_html(title) or 'Без названия'
             
             text += f"• {group_info}{status_text} | ID: <code>{chat_id}</code>\n"
     
@@ -2676,7 +2617,7 @@ async def on_member_join(update: ChatMemberUpdated):
         db.get_or_create_global_user(user.id, user.username or "", user.full_name or "", is_premium)
         db.add_user_stat(chat_id, user.id, int(time.time()))
         
-        log_text = f"<b>👋 Вход</b>\n\n👤 {user.full_name}\n🆔 <code>{user.id}</code>"
+        log_text = f"<b>👋 Вход</b>\n\n👤 {safe_html(user.full_name)}\n🆔 <code>{user.id}</code>"
         await send_to_log_group(chat_id, 'join', log_text)
         
         with db.get_connection() as conn:
@@ -2714,36 +2655,36 @@ async def on_member_join(update: ChatMemberUpdated):
         msg_text = ""
         
         if conf_type == 'both':
-            msg_text = f"👋 <b>{user.full_name}</b>, выполните два шага:\n1️⃣ Подтвердите, что вы не бот\n2️⃣ Прочитайте правила"
+            msg_text = f"👋 <b>{safe_html(user.full_name)}</b>, выполните два шага:\n1️⃣ Подтвердите, что вы не бот\n2️⃣ Прочитайте правила"
             try:
                 await bot.send_message(
                     user.id,
-                    f"Добро пожаловать в {update.chat.title}!\n\nШаг 1: Подтвердите, что вы не бот",
+                    f"Добро пожаловать в {safe_html(update.chat.title)}!\n\nШаг 1: Подтвердите, что вы не бот",
                     reply_markup=get_confirm_not_bot_keyboard(chat_id, user.id, 0)
                 )
                 if rules_html and rules_enabled:
                     await bot.send_message(
                         user.id,
-                        f"Шаг 2: Прочитайте правила:\n\n{rules_html}",
+                        f"Шаг 2: Прочитайте правила:\n\n{safe_html(rules_html)}",
                         reply_markup=get_rules_agree_keyboard(chat_id, user.id, 0),
                         parse_mode="HTML"
                     )
             except:
                 await bot.send_message(chat_id, "⚠️ Не удалось отправить подтверждение в ЛС")
             
-            builder.add(create_button("💬 Перейти в ЛС", f"go_to_pm_{chat_id}_{user.id}"))
+            builder.add(create_button("💬 Перейти в ЛС", f"go_to_pm_{chat_id}_{user.id}", "primary"))
             
         elif conf_type == 'not_bot':
-            msg_text = f"👋 <b>{user.full_name}</b>, подтвердите, что вы не бот"
-            builder.add(create_button("✅ Я не бот", f"confirm_not_bot_{chat_id}_{user.id}_0"))
+            msg_text = f"👋 <b>{safe_html(user.full_name)}</b>, подтвердите, что вы не бот"
+            builder.add(create_button("✅ Я не бот", f"confirm_not_bot_{chat_id}_{user.id}_0", "success"))
             
         elif conf_type == 'rules' and rules_html and rules_enabled:
-            msg_text = f"👋 <b>{user.full_name}</b>, прочитайте правила"
-            builder.add(create_button("💬 Перейти в ЛС", f"go_to_pm_{chat_id}_{user.id}"))
+            msg_text = f"👋 <b>{safe_html(user.full_name)}</b>, прочитайте правила"
+            builder.add(create_button("💬 Перейти в ЛС", f"go_to_pm_{chat_id}_{user.id}", "primary"))
             try:
                 await bot.send_message(
                     user.id,
-                    f"Добро пожаловать в {update.chat.title}!\n\nПрочитайте правила:\n\n{rules_html}",
+                    f"Добро пожаловать в {safe_html(update.chat.title)}!\n\nПрочитайте правила:\n\n{safe_html(rules_html)}",
                     reply_markup=get_rules_agree_keyboard(chat_id, user.id, 0),
                     parse_mode="HTML"
                 )
@@ -2756,9 +2697,9 @@ async def on_member_join(update: ChatMemberUpdated):
 @dp.chat_member(F.new_chat_member.status == "left")
 async def on_member_left(update: ChatMemberUpdated):
     db.set_left_chat(update.chat.id, update.from_user.id)
-    await bot.send_message(update.chat.id, f"👋 {update.from_user.full_name} вышел из чата")
+    await bot.send_message(update.chat.id, f"👋 {safe_html(update.from_user.full_name)} вышел из чата")
     
-    log_text = f"<b>👋 Выход</b>\n\n👤 {update.from_user.full_name}\n🆔 <code>{update.from_user.id}</code>"
+    log_text = f"<b>👋 Выход</b>\n\n👤 {safe_html(update.from_user.full_name)}\n🆔 <code>{update.from_user.id}</code>"
     await send_to_log_group(update.chat.id, 'leave', log_text)
 
 async def send_simple_welcome(chat_id, user):
@@ -2774,7 +2715,7 @@ async def send_simple_welcome(chat_id, user):
     premium_emoji = get_premium_status_emoji(global_user_data['is_premium'])
     
     text = (
-        f"Добро пожаловать, {premium_emoji} <b>{user.full_name}</b>!\n\n"
+        f"Добро пожаловать, {premium_emoji} <b>{safe_html(user.full_name)}</b>!\n\n"
         f"🆔 <b>ID:</b> <code>{global_user_data['global_id']}</code>\n"
         f"📅 <b>Впервые замечен:</b> {format_datetime(global_user_data['first_seen'])}\n"
         f"{'⭐ <b>Премиум пользователь</b>' if global_user_data['is_premium'] else ''}\n\n"
@@ -2790,14 +2731,14 @@ async def send_simple_welcome(chat_id, user):
         await bot.send_photo(
             chat_id,
             photo=welcome_photo,
-            caption=text + (f"\n\n{welcome_text}" if welcome_text else ""),
+            caption=text + (f"\n\n{safe_html(welcome_text)}" if welcome_text else ""),
             reply_markup=get_welcome_buttons(chat_id),
             parse_mode="HTML"
         )
     else:
         await bot.send_message(
             chat_id,
-            text + (f"\n\n{welcome_text}" if welcome_text else ""),
+            text + (f"\n\n{safe_html(welcome_text)}" if welcome_text else ""),
             reply_markup=get_welcome_buttons(chat_id),
             parse_mode="HTML"
         )
@@ -2811,7 +2752,6 @@ async def process_confirm_not_bot(callback: CallbackQuery):
     chat_id, user_id = int(parts[3]), int(parts[4])
     msg_id = int(parts[5]) if len(parts) > 5 else 0
     
-    # Логируем нажатие
     db.log_button_click(callback.from_user.id, callback.from_user.full_name, chat_id, callback.data)
     
     if callback.from_user.id != user_id:
@@ -2838,7 +2778,7 @@ async def process_confirm_not_bot(callback: CallbackQuery):
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=msg_id,
-                text=f"✅ {callback.from_user.full_name} подтвердил, что не бот"
+                text=f"✅ {safe_html(callback.from_user.full_name)} подтвердил, что не бот"
             )
         except:
             pass
@@ -2855,7 +2795,6 @@ async def process_agree_rules(callback: CallbackQuery):
     parts = callback.data.split('_')
     chat_id, user_id, msg_id = int(parts[2]), int(parts[3]), int(parts[4])
     
-    # Логируем нажатие
     db.log_button_click(callback.from_user.id, callback.from_user.full_name, chat_id, callback.data)
     
     if callback.from_user.id != user_id:
@@ -2882,7 +2821,7 @@ async def process_agree_rules(callback: CallbackQuery):
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=msg_id,
-                text=f"✅ {callback.from_user.full_name} согласился с правилами"
+                text=f"✅ {safe_html(callback.from_user.full_name)} согласился с правилами"
             )
         except:
             pass
@@ -2902,7 +2841,6 @@ async def go_to_pm(callback: CallbackQuery):
     else:
         user_id = callback.from_user.id
     
-    # Логируем нажатие
     db.log_button_click(callback.from_user.id, callback.from_user.full_name, chat_id or 0, callback.data)
     
     if callback.from_user.id != user_id:
@@ -2924,7 +2862,7 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
     is_admin = callback.from_user.id in ADMIN_IDS
     await callback.message.edit_text(
         "👋 <b>Главное меню</b>\n\nВыберите раздел:",
-        reply_markup=get_main_keyboard(is_group=False, is_admin=is_admin)
+        reply_markup=get_main_keyboard(is_group=callback.message.chat.type != 'private', is_admin=is_admin)
     )
     await callback.answer()
 
@@ -2940,8 +2878,8 @@ async def group_manage_main(callback: CallbackQuery, state: FSMContext):
     
     builder = InlineKeyboardBuilder()
     for chat_id, title in groups:
-        builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}"))
-    builder.add(create_button("◀️ Назад", "back_to_main"))
+        builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}", "primary"))
+    builder.add(create_button("◀️ Назад", "back_to_main", "secondary"))
     builder.adjust(1)
     
     await callback.message.edit_text("📱 <b>Ваши группы</b>\n\nВыберите группу:", reply_markup=builder.as_markup())
@@ -2987,11 +2925,11 @@ async def mod_logs(callback: CallbackQuery):
             'mute': '🔇', 'kick': '👢', 'ban': '⛔', 'warn': '⚠️'
         }.get(action, '📌')
         date = format_datetime(ts)
-        text += f"{action_emoji} <b>{mod_name}</b> → {target_name}\n"
+        text += f"{action_emoji} <b>{safe_html(mod_name)}</b> → {safe_html(target_name)}\n"
         text += f"Действие: {action}\n"
         if duration > 0:
             text += f"Длительность: {format_duration_full(duration)}\n"
-        text += f"Причина: {reason}\n"
+        text += f"Причина: {safe_html(reason)}\n"
         text += f"Время: {date}\n\n"
     
     await callback.message.answer(text, parse_mode="HTML")
@@ -3004,7 +2942,7 @@ async def show_rules_group(callback: CallbackQuery):
     chat_id = callback.message.chat.id
     rules = db.get_rules_html(chat_id)
     if rules and db.get_rules_enabled(chat_id):
-        await callback.message.answer(f"<b>📜 Правила чата</b>\n\n{rules}", parse_mode="HTML")
+        await callback.message.answer(f"<b>📜 Правила чата</b>\n\n{safe_html(rules)}", parse_mode="HTML")
     else:
         await callback.message.answer("❌ В этом чате ещё не установлены правила.")
     await callback.answer()
@@ -3074,7 +3012,7 @@ async def top_active_group(callback: CallbackQuery):
             premium_emoji = ""
         
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        text += f"{medal} {premium_emoji} {name} — {count} 💬\n"
+        text += f"{medal} {premium_emoji} {safe_html(name)} — {count} 💬\n"
     
     await callback.message.answer(text, parse_mode="HTML")
     await callback.answer()
@@ -3101,7 +3039,7 @@ async def select_group(callback: CallbackQuery, state: FSMContext):
         chat_title = result[0] if result else "Группа"
     
     await callback.message.edit_text(
-        f"⚙️ <b>Настройка группы:</b> {chat_title}\n\nВыберите действие:",
+        f"⚙️ <b>Настройка группы:</b> {safe_html(chat_title)}\n\nВыберите действие:",
         reply_markup=get_group_manage_keyboard()
     )
     await callback.answer()
@@ -3115,8 +3053,8 @@ async def back_to_groups(callback: CallbackQuery, state: FSMContext):
     
     builder = InlineKeyboardBuilder()
     for chat_id, title in groups:
-        builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}"))
-    builder.add(create_button("◀️ Назад", "back_to_main"))
+        builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}", "primary"))
+    builder.add(create_button("◀️ Назад", "back_to_main", "secondary"))
     builder.adjust(1)
     
     await callback.message.edit_text("📱 <b>Ваши группы</b>\n\nВыберите группу:", reply_markup=builder.as_markup())
@@ -3190,7 +3128,7 @@ async def process_give_mod_user(message: Message, state: FSMContext):
     await state.update_data(target_mod_id=target_id, target_mod_name=target_name)
     
     await message.answer(
-        f"Выберите права для {target_name}:",
+        f"Выберите права для {safe_html(target_name)}:",
         reply_markup=get_mod_rights_keyboard(target_id)
     )
 
@@ -3273,7 +3211,7 @@ async def list_moderators(callback: CallbackQuery, state: FSMContext):
             if mod[4]: rights.append("⚠️ варн")
             
             rights_text = ", ".join(rights) if rights else "нет прав"
-            text += f"• <b>{name}</b>\n  Права: {rights_text}\n\n"
+            text += f"• <b>{safe_html(name)}</b>\n  Права: {rights_text}\n\n"
         except:
             continue
     
@@ -3338,8 +3276,8 @@ async def link_log_group(callback: CallbackQuery, state: FSMContext):
     
     builder = InlineKeyboardBuilder()
     for log_id, title in log_groups:
-        builder.add(create_button(title or f"Группа {log_id}", f"select_log_group_{log_id}"))
-    builder.add(create_button("◀️ Назад", "log_group_manage"))
+        builder.add(create_button(title or f"Группа {log_id}", f"select_log_group_{log_id}", "primary"))
+    builder.add(create_button("◀️ Назад", "log_group_manage", "secondary"))
     builder.adjust(1)
     
     await callback.message.edit_text(
@@ -3388,7 +3326,7 @@ async def log_group_settings(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         f"📋 <b>Настройки отправки в лог-группу</b>\n\n"
-        f"Группа: {log_group_info['group_title']}\n"
+        f"Группа: {safe_html(log_group_info['group_title'])}\n"
         f"ID: <code>{log_group_info['log_group_id']}</code>\n\n"
         f"Выберите, какие события отправлять:",
         reply_markup=get_log_settings_keyboard(settings),
@@ -3508,7 +3446,7 @@ async def log_group_info(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         f"📋 <b>Информация о группе логов</b>\n\n"
-        f"Группа: {log_group_info['group_title']}\n"
+        f"Группа: {safe_html(log_group_info['group_title'])}\n"
         f"ID: <code>{log_group_info['log_group_id']}</code>\n\n"
         f"<b>Отправка событий:</b>\n"
         f"• Нарушения: {stats['violations']}\n"
@@ -3639,7 +3577,7 @@ async def show_rules(callback: CallbackQuery, state: FSMContext):
     
     if rules_html:
         await callback.message.edit_text(
-            f"📜 <b>Текущие правила:</b>\n\n{rules_html}",
+            f"📜 <b>Текущие правила:</b>\n\n{safe_html(rules_html)}",
             parse_mode="HTML",
             reply_markup=get_back_keyboard("manage_rules")
         )
@@ -3706,8 +3644,8 @@ async def delete_rules_confirm(callback: CallbackQuery, state: FSMContext):
         return
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Да, удалить", "delete_rules"))
-    builder.add(create_button("🚫 Нет", "manage_rules"))
+    builder.add(create_button("✅ Да, удалить", "delete_rules", "danger"))
+    builder.add(create_button("🚫 Нет", "manage_rules", "secondary"))
     builder.adjust(1)
     
     await callback.message.edit_text("❓ Вы уверены, что хотите удалить правила?", reply_markup=builder.as_markup())
@@ -3899,13 +3837,13 @@ async def show_welcome(callback: CallbackQuery, state: FSMContext):
     if photo_id:
         await callback.message.answer_photo(
             photo_id,
-            caption=f"👋 <b>Текущее приветствие:</b>\n\n{text}" if text else None,
+            caption=f"👋 <b>Текущее приветствие:</b>\n\n{safe_html(text)}" if text else None,
             reply_markup=get_back_keyboard("manage_welcome"),
             parse_mode="HTML"
         )
     else:
         await callback.message.answer(
-            f"👋 <b>Текущее приветствие:</b>\n\n{text}",
+            f"👋 <b>Текущее приветствие:</b>\n\n{safe_html(text)}",
             reply_markup=get_back_keyboard("manage_welcome"),
             parse_mode="HTML"
         )
@@ -4419,7 +4357,7 @@ async def auto_response_manage(callback: CallbackQuery, state: FSMContext):
         for trigger, resp, resp_type, _ in responses:
             short_resp = resp[:30] + "..." if len(resp) > 30 else resp
             type_emoji = "📝" if resp_type == 'text' else "🖼" if resp_type == 'photo' else "🎬" if resp_type == 'animation' else "🎯"
-            text += f"• {type_emoji} <code>{trigger}</code> → {short_resp}\n"
+            text += f"• {type_emoji} <code>{safe_html(trigger)}</code> → {safe_html(short_resp)}\n"
     
     await callback.message.edit_text(text, reply_markup=get_auto_response_keyboard(responses), parse_mode="HTML")
     await callback.answer()
@@ -4465,7 +4403,7 @@ async def process_auto_trigger(message: Message, state: FSMContext):
     
     await state.update_data(auto_trigger=trigger)
     await message.reply(
-        f"📝 Введите ответ для триггера '{trigger}'.\n"
+        f"📝 Введите ответ для триггера '{safe_html(trigger)}'.\n"
         f"Макс. длина: {MAX_RESPONSE_LENGTH} символов\n\n"
         "Вы можете отправить:\n"
         "• Текст с форматированием\n"
@@ -4568,7 +4506,7 @@ async def process_remove_trigger(callback: CallbackQuery, state: FSMContext):
     trigger = responses[index][0]
     db.remove_auto_response(chat_id, trigger)
     
-    await callback.answer(f"✅ Триггер '{trigger}' удалён!", show_alert=True)
+    await callback.answer(f"✅ Триггер '{safe_html(trigger)}' удалён!", show_alert=True)
     await auto_response_manage(callback, state)
 
 # ========== ССЫЛКИ И УПОМИНАНИЯ ==========
@@ -4917,7 +4855,7 @@ async def unlink_group(callback: CallbackQuery, state: FSMContext):
     await callback.answer("✅ Группа отвязана!")
     
     await state.clear()
-    await cmd_start_pm(callback.message, state)
+    await cmd_start(callback.message, state)
 
 @dp.callback_query(F.data == "group_manage")
 @anti_button_flood()
@@ -4937,7 +4875,7 @@ async def back_to_group_manage(callback: CallbackQuery, state: FSMContext):
         chat_title = result[0] if result else "Группа"
     
     await callback.message.edit_text(
-        f"⚙️ <b>Настройка группы:</b> {chat_title}\n\nВыберите действие:",
+        f"⚙️ <b>Настройка группы:</b> {safe_html(chat_title)}\n\nВыберите действие:",
         reply_markup=get_group_manage_keyboard()
     )
     await callback.answer()
@@ -4951,7 +4889,7 @@ async def show_group_rules(callback: CallbackQuery):
     rules = db.get_rules_html(chat_id)
     
     if rules and db.get_rules_enabled(chat_id):
-        await callback.message.answer(f"📜 <b>Правила чата</b>\n\n{rules}", parse_mode="HTML")
+        await callback.message.answer(f"📜 <b>Правила чата</b>\n\n{safe_html(rules)}", parse_mode="HTML")
     else:
         await callback.message.answer("❌ В этом чате ещё не установлены правила.")
     
@@ -5027,7 +4965,7 @@ async def top_active(callback: CallbackQuery):
             premium_emoji = ""
         
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        text += f"{medal} {premium_emoji} {name} — {count} 💬\n"
+        text += f"{medal} {premium_emoji} {safe_html(name)} — {count} 💬\n"
     
     await callback.message.answer(text, parse_mode="HTML")
     await callback.answer()
@@ -5052,7 +4990,7 @@ async def about(callback: CallbackQuery):
         "• Подтверждение входа\n"
         "• Поддержка премиум эмодзи ⭐\n\n"
         "➕ Нажмите «Добавить в группу» чтобы пригласить меня",
-        reply_markup=get_main_keyboard(is_group=False, is_admin=is_admin)
+        reply_markup=get_main_keyboard(is_group=callback.message.chat.type != 'private', is_admin=is_admin)
     )
     await callback.answer()
 
@@ -5093,7 +5031,7 @@ async def help(callback: CallbackQuery):
         "• Нужно подтвердить, что не бот\n"
         "• Если есть правила - согласиться с ними\n"
         "• Мут снимается после подтверждения",
-        reply_markup=get_main_keyboard(is_group=False, is_admin=is_admin)
+        reply_markup=get_main_keyboard(is_group=callback.message.chat.type != 'private', is_admin=is_admin)
     )
     await callback.answer()
 
@@ -5118,18 +5056,23 @@ async def admin_panel(callback: CallbackQuery, state: FSMContext):
     )
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("📊 Статистика", "admin_stats"))
-    builder.add(create_button("📱 Группы", "admin_groups"))
-    builder.add(create_button("👥 Пользователи", "admin_users"))
-    builder.add(create_button("📋 Логи", "admin_logs"))
-    builder.add(create_button("🛠 Техработы", "admin_maintenance"))
-    builder.add(create_button("📢 Рассылка", "admin_broadcast"))
-    builder.add(create_button("📦 Бэкап", "admin_backup"))
-    builder.add(create_button("❌ Выключить", "admin_shutdown"))
-    builder.add(create_button("◀️ Назад", "back_to_main"))
+    builder.add(create_button("📊 Статистика", "admin_stats", "primary"))
+    builder.add(create_button("📱 Группы", "admin_groups", "primary"))
+    builder.add(create_button("👥 Пользователи", "admin_users", "primary"))
+    builder.add(create_button("📋 Логи", "admin_logs", "primary"))
+    builder.add(create_button("🛠 Техработы", "admin_maintenance", "danger" if technical_maintenance else "secondary"))
+    builder.add(create_button("📢 Рассылка", "admin_broadcast", "success"))
+    builder.add(create_button("📦 Бэкап", "admin_backup", "secondary"))
+    builder.add(create_button("❌ Выключить", "admin_shutdown", "danger"))
+    builder.add(create_button("◀️ Назад", "back_to_main", "secondary"))
     builder.adjust(2)
     
-    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    # ИСПРАВЛЕНИЕ: используем safe_html для текста
+    await callback.message.edit_text(
+        safe_html(text), 
+        reply_markup=builder.as_markup(), 
+        parse_mode="HTML"
+    )
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_maintenance")
@@ -5150,11 +5093,11 @@ async def admin_maintenance(callback: CallbackQuery):
     
     builder = InlineKeyboardBuilder()
     if technical_maintenance:
-        builder.add(create_button("🟢 Выключить", "maintenance_off"))
+        builder.add(create_button("🟢 Выключить", "maintenance_off", "success"))
     else:
-        builder.add(create_button("🔴 Включить", "maintenance_on"))
-    builder.add(create_button("✏️ Изменить сообщение", "maintenance_message"))
-    builder.add(create_button("◀️ Назад", "admin_panel"))
+        builder.add(create_button("🔴 Включить", "maintenance_on", "danger"))
+    builder.add(create_button("✏️ Изменить сообщение", "maintenance_message", "primary"))
+    builder.add(create_button("◀️ Назад", "admin_panel", "secondary"))
     builder.adjust(1)
     
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
@@ -5263,8 +5206,8 @@ async def admin_stats(callback: CallbackQuery):
     )
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🔄 Обновить", "admin_stats"))
-    builder.add(create_button("◀️ Назад", "admin_panel"))
+    builder.add(create_button("🔄 Обновить", "admin_stats", "primary"))
+    builder.add(create_button("◀️ Назад", "admin_panel", "secondary"))
     builder.adjust(2)
     
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
@@ -5292,10 +5235,10 @@ async def admin_groups(callback: CallbackQuery):
         if welcome_enabled:
             status.append("👋✅")
         status_text = f" [{''.join(status)}]" if status else ""
-        text += f"• {title or 'Без названия'}{status_text} | ID: <code>{chat_id}</code>\n"
+        text += f"• {safe_html(title) or 'Без названия'}{status_text} | ID: <code>{chat_id}</code>\n"
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("◀️ Назад", "admin_panel"))
+    builder.add(create_button("◀️ Назад", "admin_panel", "secondary"))
     
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
     await callback.answer()
@@ -5318,10 +5261,10 @@ async def admin_users(callback: CallbackQuery):
     for name, gid, ts, is_premium in users:
         date = format_datetime(ts)
         premium_emoji = "⭐" if is_premium else ""
-        text += f"• {premium_emoji} {name}\n  ID: <code>{gid}</code> | {date}\n\n"
+        text += f"• {premium_emoji} {safe_html(name)}\n  ID: <code>{gid}</code> | {date}\n\n"
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("◀️ Назад", "admin_panel"))
+    builder.add(create_button("◀️ Назад", "admin_panel", "secondary"))
     
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
     await callback.answer()
@@ -5344,13 +5287,13 @@ async def admin_logs(callback: CallbackQuery):
     if logs:
         for name, reason, punishment, ts in logs:
             date = format_datetime(ts)
-            text += f"• <b>{name}</b>\n  {reason} → {punishment} | {date}\n\n"
+            text += f"• <b>{safe_html(name)}</b>\n  {safe_html(reason)} → {punishment} | {date}\n\n"
     else:
         text += "Нарушений пока нет."
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🗑 Очистить", "admin_logs_clear"))
-    builder.add(create_button("◀️ Назад", "admin_panel"))
+    builder.add(create_button("🗑 Очистить", "admin_logs_clear", "danger"))
+    builder.add(create_button("◀️ Назад", "admin_panel", "secondary"))
     builder.adjust(2)
     
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
@@ -5365,8 +5308,8 @@ async def admin_logs_clear(callback: CallbackQuery):
         return
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Да, очистить", "admin_logs_clear_confirm"))
-    builder.add(create_button("🚫 Нет", "admin_logs"))
+    builder.add(create_button("✅ Да, очистить", "admin_logs_clear_confirm", "danger"))
+    builder.add(create_button("🚫 Нет", "admin_logs", "secondary"))
     builder.adjust(1)
     
     await callback.message.edit_text(
@@ -5475,8 +5418,8 @@ async def admin_shutdown(callback: CallbackQuery):
         return
     
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Да, выключить", "admin_shutdown_confirm"))
-    builder.add(create_button("🚫 Нет", "admin_panel"))
+    builder.add(create_button("✅ Да, выключить", "admin_shutdown_confirm", "danger"))
+    builder.add(create_button("🚫 Нет", "admin_panel", "secondary"))
     builder.adjust(1)
     
     await callback.message.edit_text(
