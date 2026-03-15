@@ -1211,6 +1211,10 @@ class ModerationStates(StatesGroup):
     waiting_for_unban_user = State()
     waiting_for_unmute_user = State()
     waiting_for_confirm_action = State()
+    waiting_for_give_mute_user = State()  # ← ЭТО НУЖНО ДОБАВИТЬ
+    waiting_for_give_kick_user = State()  # ← ЭТО НУЖНО ДОБАВИТЬ
+    waiting_for_give_ban_user = State()   # ← ЭТО НУЖНО ДОБАВИТЬ
+    waiting_for_give_warn_user = State()  # ← ЭТО НУЖНО ДОБАВИТЬ
 
 class LogGroupStates(StatesGroup):
     waiting_for_log_group_id = State()
