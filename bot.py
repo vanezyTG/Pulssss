@@ -50,7 +50,7 @@ SPAM_MESSAGE_LIMIT = 50
 SPAM_CHECK_TIME = 60
 SPAM_WARN_LIMIT = 3
 
-SUPPORT_LINK = "https://t.me/puls_support"
+SUPPORT_LINK = "https://t.me/Suppot_Puls"
 
 MAX_BUTTON_PRESSES = 3
 BUTTON_CHECK_TIME = 60
