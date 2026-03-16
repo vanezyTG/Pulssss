@@ -5225,7 +5225,11 @@ async def admin_maintenance(callback: CallbackQuery):
     builder.add(create_button("✏️ Изменить сообщение", "maintenance_message", "primary"))
     builder.add(create_button("◀️ Назад", "admin_panel", "secondary"))
     builder.adjust(1)
-    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text(
+        safe_html(text),  # ← ИЗМЕНИТЬ ЗДЕСЬ
+        reply_markup=builder.as_markup(), 
+        parse_mode="HTML"
+    )
     await callback.answer()
 
 @dp.callback_query(F.data == "maintenance_on")
