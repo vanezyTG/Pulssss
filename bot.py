@@ -99,20 +99,6 @@ def check_public():
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
-            user = callback.from_user
-            chat = callback.message.chat
-            user_link = f"<a href='tg://user?id={user.id}'>{html.escape(user.full_name)}</a>"
-            logger.info(f"👤 Пользователь {user.full_name} ({user.id}) нажал кнопку: {callback.data}")
-            if chat.type in ['group', 'supergroup']:
-                try:
-                    await bot.send_message(
-                        chat.id,
-                        f"👤 {user_link} нажал кнопку",
-                        parse_mode="HTML",
-                        disable_notification=True
-                    )
-                except:
-                    pass
             return await func(callback, *args, **kwargs)
         return wrapper
     return decorator
@@ -151,7 +137,17 @@ def pm_only():
         return wrapper
     return decorator
 
-def anti_button_flood():
+def edit_only():
+    """Для кнопок, которые только редактируют текущее сообщение (без КД и уведомлений)"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(callback: CallbackQuery, *args, **kwargs):
+            return await func(callback, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def action_with_flood():
+    """Для кнопок, которые отправляют новые сообщения (с КД и уведомлениями)"""
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
@@ -159,14 +155,30 @@ def anti_button_flood():
             button_data = callback.data
             now = time.time()
             key = f"{user_id}_{button_data}"
+            
             user_button_presses[key] = [t for t in user_button_presses[key] if now - t < BUTTON_CHECK_TIME]
+            
             if len(user_button_presses[key]) >= MAX_BUTTON_PRESSES:
                 oldest = user_button_presses[key][0] if user_button_presses[key] else now
                 wait_time = int(BUTTON_CHECK_TIME - (now - oldest))
                 logger.warning(f"🚫 Слишком частые нажатия: {callback.from_user.full_name}")
-                await callback.answer(f"⚠️ Не нажимай так часто! Подожди {wait_time} сек.", show_alert=True)
+                await callback.answer(f"⚠️ Подожди {wait_time} сек.", show_alert=True)
                 return
+            
             user_button_presses[key].append(now)
+            
+            if callback.message.chat.type in ['group', 'supergroup']:
+                user_link = f"<a href='tg://user?id={user_id}'>{html.escape(callback.from_user.full_name)}</a>"
+                try:
+                    await bot.send_message(
+                        callback.message.chat.id,
+                        f"👤 {user_link} использовал функцию",
+                        parse_mode="HTML",
+                        disable_notification=True
+                    )
+                except:
+                    pass
+            
             return await func(callback, *args, **kwargs)
         return wrapper
     return decorator
@@ -1211,10 +1223,6 @@ class ModerationStates(StatesGroup):
     waiting_for_unban_user = State()
     waiting_for_unmute_user = State()
     waiting_for_confirm_action = State()
-    waiting_for_give_mute_user = State()  # ← ЭТО НУЖНО ДОБАВИТЬ
-    waiting_for_give_kick_user = State()  # ← ЭТО НУЖНО ДОБАВИТЬ
-    waiting_for_give_ban_user = State()   # ← ЭТО НУЖНО ДОБАВИТЬ
-    waiting_for_give_warn_user = State()  # ← ЭТО НУЖНО ДОБАВИТЬ
 
 class LogGroupStates(StatesGroup):
     waiting_for_log_group_id = State()
@@ -1417,7 +1425,6 @@ def get_main_keyboard(is_group: bool = False, is_admin: bool = False):
         builder.add(create_button("📜 Правила", "show_rules_group", "secondary"))
         builder.add(create_button("📊 Статистика", "my_stats_group", "secondary"))
         builder.add(create_button("🏆 Топ", "top_active_group", "success"))
-        builder.add(create_button("🛡️ Модерация", "moderation_actions", "danger"))
     if is_admin and not is_group:
         builder.add(create_button("👑 Админ панель", "admin_panel", "danger"))
     builder.adjust(2)
@@ -1477,17 +1484,10 @@ def get_confirm_action_keyboard(action, user_id, duration=None, reason=None):
     builder.adjust(2)
     return builder.as_markup()
 
-def get_moderation_actions_keyboard():
+def get_lift_restriction_keyboard(action, user_id, message_id):
+    """Клавиатура для снятия ограничения"""
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🔇 Замутить", "mod_mute", "primary"))
-    builder.add(create_button("🔊 Размутить", "mod_unmute", "secondary"))
-    builder.add(create_button("👢 Кикнуть", "mod_kick", "danger"))
-    builder.add(create_button("⛔ Забанить", "mod_ban", "danger"))
-    builder.add(create_button("✅ Разбанить", "mod_unban", "success"))
-    builder.add(create_button("⚠️ Предупредить", "mod_warn", "secondary"))
-    builder.add(create_button("📋 Логи", "mod_logs", "secondary"))
-    builder.add(create_button("◀️ Назад", "back_to_main", "secondary"))
-    builder.adjust(2)
+    builder.add(create_button("🔓 Снять ограничение", f"lift_{action}_{user_id}_{message_id}", "success"))
     return builder.as_markup()
 
 def get_moderators_manage_keyboard(moderators):
@@ -1821,12 +1821,26 @@ class AntiFloodMiddleware(BaseMiddleware):
             if punish_type == 'mute':
                 until = int(time.time() + duration) if duration > 0 else None
                 await bot.restrict_chat_member(chat_id, user.id, permissions=ChatPermissions(can_send_messages=False), until_date=until)
-                await event.reply(f"🔇 {user.full_name} замьючен на {format_interval(duration) if duration > 0 else 'навсегда'}")
+                msg = await event.reply(
+                    f"🔇 <b>Пользователь {safe_html(user.full_name)} замьючен</b>\n\n"
+                    f"👮 Модератор: {safe_html(event.from_user.full_name)}\n"
+                    f"⏱ Длительность: {format_interval(duration) if duration > 0 else 'навсегда'}\n"
+                    f"📝 Причина: {safe_html(reason)}",
+                    reply_markup=get_lift_restriction_keyboard('mute', user.id, event.message_id),
+                    parse_mode="HTML"
+                )
                 await add_premium_reaction(event, "🔇")
             elif punish_type == 'ban':
                 until = int(time.time() + duration) if duration > 0 else None
                 await bot.ban_chat_member(chat_id, user.id, until_date=until)
-                await event.reply(f"⛔️ {user.full_name} забанен на {format_interval(duration) if duration > 0 else 'навсегда'}")
+                msg = await event.reply(
+                    f"⛔️ <b>Пользователь {safe_html(user.full_name)} забанен</b>\n\n"
+                    f"👮 Модератор: {safe_html(event.from_user.full_name)}\n"
+                    f"⏱ Длительность: {format_interval(duration) if duration > 0 else 'навсегда'}\n"
+                    f"📝 Причина: {safe_html(reason)}",
+                    reply_markup=get_lift_restriction_keyboard('ban', user.id, event.message_id),
+                    parse_mode="HTML"
+                )
                 await add_premium_reaction(event, "⛔️")
             elif punish_type == 'kick':
                 await bot.ban_chat_member(chat_id, user.id)
@@ -2256,9 +2270,9 @@ async def cmd_mute(message: Message, state: FSMContext):
         await state.set_state(ModerationStates.waiting_for_confirm_action)
         return
     
-    await execute_mute(message.chat.id, target_user.id, target_user.full_name, duration, reason, message.from_user)
+    await execute_mute(message.chat.id, target_user.id, target_user.full_name, duration, reason, message.from_user, message.message_id)
 
-async def execute_mute(chat_id: int, target_id: int, target_name: str, duration: int, reason: str, moderator: types.User):
+async def execute_mute(chat_id: int, target_id: int, target_name: str, duration: int, reason: str, moderator: types.User, message_id: int):
     try:
         until = int(time.time() + duration) if duration > 0 else None
         await bot.restrict_chat_member(
@@ -2268,12 +2282,13 @@ async def execute_mute(chat_id: int, target_id: int, target_name: str, duration:
             until_date=until
         )
         duration_text = format_time(duration) if duration > 0 else "навсегда"
-        await bot.send_message(
+        msg = await bot.send_message(
             chat_id,
             f"🔇 <b>Пользователь {safe_html(target_name)} замьючен</b>\n\n"
             f"👮 Модератор: {safe_html(moderator.full_name)}\n"
             f"⏱ Длительность: {duration_text}\n"
             f"📝 Причина: {safe_html(reason)}",
+            reply_markup=get_lift_restriction_keyboard('mute', target_id, message_id),
             parse_mode="HTML"
         )
         db.log_moderator_action(
@@ -2374,19 +2389,20 @@ async def cmd_ban(message: Message, state: FSMContext):
         await state.set_state(ModerationStates.waiting_for_confirm_action)
         return
     
-    await execute_ban(message.chat.id, target_user.id, target_user.full_name, duration, reason, message.from_user)
+    await execute_ban(message.chat.id, target_user.id, target_user.full_name, duration, reason, message.from_user, message.message_id)
 
-async def execute_ban(chat_id: int, target_id: int, target_name: str, duration: int, reason: str, moderator: types.User):
+async def execute_ban(chat_id: int, target_id: int, target_name: str, duration: int, reason: str, moderator: types.User, message_id: int):
     try:
         until = int(time.time() + duration) if duration > 0 else None
         await bot.ban_chat_member(chat_id, target_id, until_date=until)
         duration_text = format_time(duration) if duration > 0 else "навсегда"
-        await bot.send_message(
+        msg = await bot.send_message(
             chat_id,
             f"⛔ <b>Пользователь {safe_html(target_name)} забанен</b>\n\n"
             f"👮 Модератор: {safe_html(moderator.full_name)}\n"
             f"⏱ Длительность: {duration_text}\n"
             f"📝 Причина: {safe_html(reason)}",
+            reply_markup=get_lift_restriction_keyboard('ban', target_id, message_id),
             parse_mode="HTML"
         )
         db.log_moderator_action(
@@ -2518,12 +2534,13 @@ async def process_confirm_action(callback: CallbackQuery, state: FSMContext):
     duration = data.get('duration')
     reason = data.get('reason')
     moderator = callback.from_user
+    message_id = data.get('message_id')
     
     if callback.data.endswith('_yes'):
         if action == 'mute':
-            await execute_mute(callback.message.chat.id, target_id, target_name, duration, reason, moderator)
+            await execute_mute(callback.message.chat.id, target_id, target_name, duration, reason, moderator, message_id)
         elif action == 'ban':
-            await execute_ban(callback.message.chat.id, target_id, target_name, duration, reason, moderator)
+            await execute_ban(callback.message.chat.id, target_id, target_name, duration, reason, moderator, message_id)
         elif action == 'kick':
             await execute_kick(callback.message.chat.id, target_id, target_name, reason, moderator)
         await callback.message.edit_text("✅ Действие выполнено!")
@@ -2532,6 +2549,71 @@ async def process_confirm_action(callback: CallbackQuery, state: FSMContext):
     
     await state.clear()
     await callback.answer()
+
+@dp.callback_query(F.data.startswith("lift_"))
+@edit_only()
+@check_public()
+async def lift_restriction(callback: CallbackQuery):
+    """Снимает ограничение с пользователя"""
+    parts = callback.data.split('_')
+    action = parts[1]  # mute или ban
+    target_id = int(parts[2])
+    original_message_id = int(parts[3])
+    moderator = callback.from_user
+    chat_id = callback.message.chat.id
+    
+    try:
+        if action == 'mute':
+            await bot.restrict_chat_member(
+                chat_id,
+                target_id,
+                permissions=ChatPermissions(
+                    can_send_messages=True,
+                    can_send_media_messages=True,
+                    can_send_polls=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True,
+                    can_change_info=False,
+                    can_invite_users=True,
+                    can_pin_messages=False
+                )
+            )
+            await callback.message.edit_text(
+                f"🔊 <b>Ограничение снято</b>\n\n"
+                f"👮 Модератор: {safe_html(moderator.full_name)}\n"
+                f"👤 Пользователь снял ограничение, наложенное в сообщении выше",
+                parse_mode="HTML"
+            )
+            
+            # Отправляем уведомление в ответ на оригинальное сообщение
+            await bot.send_message(
+                chat_id,
+                f"✅ Нарушения пользователя сняты модератором {safe_html(moderator.full_name)}",
+                reply_to_message_id=original_message_id,
+                parse_mode="HTML"
+            )
+            
+        elif action == 'ban':
+            await bot.unban_chat_member(chat_id, target_id)
+            await callback.message.edit_text(
+                f"✅ <b>Разбанен</b>\n\n"
+                f"👮 Модератор: {safe_html(moderator.full_name)}\n"
+                f"👤 Пользователь разбанен",
+                parse_mode="HTML"
+            )
+            
+            # Отправляем уведомление в ответ на оригинальное сообщение
+            await bot.send_message(
+                chat_id,
+                f"✅ Бан пользователя снят модератором {safe_html(moderator.full_name)}",
+                reply_to_message_id=original_message_id,
+                parse_mode="HTML"
+            )
+        
+        await callback.answer("✅ Ограничение снято!")
+        
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
 @dp.message(Command("mods"))
 @group_only()
@@ -2994,7 +3076,7 @@ async def send_simple_welcome(chat_id, user):
         )
 
 @dp.callback_query(F.data.startswith("confirm_not_bot_"))
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def process_confirm_not_bot(callback: CallbackQuery):
     parts = callback.data.split('_')
@@ -3030,7 +3112,7 @@ async def process_confirm_not_bot(callback: CallbackQuery):
     await add_premium_reaction(callback.message, "✅")
 
 @dp.callback_query(F.data.startswith("agree_rules_"))
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def process_agree_rules(callback: CallbackQuery):
     parts = callback.data.split('_')
@@ -3065,7 +3147,7 @@ async def process_agree_rules(callback: CallbackQuery):
     await add_premium_reaction(callback.message, "✅")
 
 @dp.callback_query(F.data.startswith("go_to_pm_"))
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def go_to_pm(callback: CallbackQuery):
     parts = callback.data.split('_')
@@ -3084,7 +3166,7 @@ async def go_to_pm(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "back_to_main")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def back_to_main(callback: CallbackQuery, state: FSMContext):
     await state.clear()
@@ -3097,7 +3179,7 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "group_manage_main")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def group_manage_main(callback: CallbackQuery, state: FSMContext):
     groups = db.get_user_groups(callback.from_user.id)
@@ -3113,7 +3195,7 @@ async def group_manage_main(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "group_manage_group")
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def group_manage_group(callback: CallbackQuery):
     await callback.message.answer(
@@ -3123,42 +3205,8 @@ async def group_manage_group(callback: CallbackQuery):
     )
     await callback.answer()
 
-@dp.callback_query(F.data == "moderation_actions")
-@anti_button_flood()
-@check_public()
-async def moderation_actions(callback: CallbackQuery):
-    await callback.message.answer(
-        "🛡️ <b>Действия модерации</b>\n\n"
-        "Выберите действие:",
-        reply_markup=get_moderation_actions_keyboard()
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data == "mod_logs")
-@anti_button_flood()
-@check_public()
-async def mod_logs(callback: CallbackQuery):
-    chat_id = callback.message.chat.id
-    logs = db.get_moderator_logs(chat_id, limit=10)
-    if not logs:
-        await callback.message.answer("📋 Логов модерации пока нет")
-        await callback.answer()
-        return
-    text = "📋 <b>Последние действия модераторов:</b>\n\n"
-    for mod_name, action, target_name, duration, reason, ts in logs:
-        action_emoji = {'mute': '🔇', 'kick': '👢', 'ban': '⛔', 'warn': '⚠️'}.get(action, '📌')
-        date = format_datetime(ts)
-        text += f"{action_emoji} <b>{safe_html(mod_name)}</b> → {safe_html(target_name)}\n"
-        text += f"Действие: {action}\n"
-        if duration > 0:
-            text += f"Длительность: {format_time(duration)}\n"
-        text += f"Причина: {safe_html(reason)}\n"
-        text += f"Время: {date}\n\n"
-    await callback.message.answer(text, parse_mode="HTML")
-    await callback.answer()
-
 @dp.callback_query(F.data == "show_rules_group")
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def show_rules_group(callback: CallbackQuery):
     chat_id = callback.message.chat.id
@@ -3170,7 +3218,7 @@ async def show_rules_group(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "my_stats_group")
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def my_stats_group(callback: CallbackQuery):
     chat_id = callback.message.chat.id
@@ -3208,7 +3256,7 @@ async def my_stats_group(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "top_active_group")
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def top_active_group(callback: CallbackQuery):
     chat_id = callback.message.chat.id
@@ -3242,7 +3290,7 @@ async def top_active_group(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("select_group_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def select_group(callback: CallbackQuery, state: FSMContext):
     chat_id = int(callback.data.split('_')[-1])
@@ -3265,7 +3313,7 @@ async def select_group(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "back_to_groups")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def back_to_groups(callback: CallbackQuery, state: FSMContext):
     await state.clear()
@@ -3279,7 +3327,7 @@ async def back_to_groups(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "puls_antispam_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def puls_antispam_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3299,7 +3347,7 @@ async def puls_antispam_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_puls_antispam")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_puls_antispam(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3313,7 +3361,7 @@ async def toggle_puls_antispam(callback: CallbackQuery, state: FSMContext):
     await puls_antispam_manage(callback, state)
 
 @dp.callback_query(F.data == "puls_antispam_info")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def puls_antispam_info(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
@@ -3330,7 +3378,7 @@ async def puls_antispam_info(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "confirmation_actions_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def confirmation_actions_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3348,7 +3396,7 @@ async def confirmation_actions_manage(callback: CallbackQuery, state: FSMContext
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_confirm_ban")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_confirm_ban(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3363,7 +3411,7 @@ async def toggle_confirm_ban(callback: CallbackQuery, state: FSMContext):
     await confirmation_actions_manage(callback, state)
 
 @dp.callback_query(F.data == "toggle_confirm_kick")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_confirm_kick(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3378,7 +3426,7 @@ async def toggle_confirm_kick(callback: CallbackQuery, state: FSMContext):
     await confirmation_actions_manage(callback, state)
 
 @dp.callback_query(F.data == "toggle_confirm_mute")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_confirm_mute(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3393,7 +3441,7 @@ async def toggle_confirm_mute(callback: CallbackQuery, state: FSMContext):
     await confirmation_actions_manage(callback, state)
 
 @dp.callback_query(F.data == "confirmation_actions_info")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def confirmation_actions_info(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
@@ -3409,7 +3457,7 @@ async def confirmation_actions_info(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "log_group_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def log_group_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3427,7 +3475,7 @@ async def log_group_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "log_group_help")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def log_group_help(callback: CallbackQuery):
     await callback.message.edit_text(
@@ -3445,7 +3493,7 @@ async def log_group_help(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "link_log_group")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def link_log_group(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
@@ -3471,7 +3519,7 @@ async def link_log_group(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("select_log_group_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def select_log_group(callback: CallbackQuery, state: FSMContext):
     log_group_id = int(callback.data.split('_')[-1])
@@ -3485,7 +3533,7 @@ async def select_log_group(callback: CallbackQuery, state: FSMContext):
     await log_group_manage(callback, state)
 
 @dp.callback_query(F.data == "log_group_settings")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def log_group_settings(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3512,7 +3560,7 @@ async def log_group_settings(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_log_violations")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_log_violations(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3528,7 +3576,7 @@ async def toggle_log_violations(callback: CallbackQuery, state: FSMContext):
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_mod")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_log_mod(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3544,7 +3592,7 @@ async def toggle_log_mod(callback: CallbackQuery, state: FSMContext):
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_joins")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_log_joins(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3560,7 +3608,7 @@ async def toggle_log_joins(callback: CallbackQuery, state: FSMContext):
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_leaves")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_log_leaves(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3576,7 +3624,7 @@ async def toggle_log_leaves(callback: CallbackQuery, state: FSMContext):
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_messages")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_log_messages(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3592,7 +3640,7 @@ async def toggle_log_messages(callback: CallbackQuery, state: FSMContext):
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "log_group_info")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def log_group_info(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3625,7 +3673,7 @@ async def log_group_info(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "unlink_log_group")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def unlink_log_group(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3635,7 +3683,7 @@ async def unlink_log_group(callback: CallbackQuery, state: FSMContext):
     await log_group_manage(callback, state)
 
 @dp.callback_query(F.data == "moderators_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def moderators_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3652,7 +3700,7 @@ async def moderators_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "give_mod_rights")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def give_mod_rights(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
@@ -3697,7 +3745,7 @@ async def process_give_mod_user(message: Message, state: FSMContext):
     )
 
 @dp.callback_query(F.data.startswith("give_mute_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def give_mute_right(callback: CallbackQuery, state: FSMContext):
     target_id = int(callback.data.split('_')[-1])
@@ -3708,7 +3756,7 @@ async def give_mute_right(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("✅ Право успешно выдано!")
 
 @dp.callback_query(F.data.startswith("give_kick_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def give_kick_right(callback: CallbackQuery, state: FSMContext):
     target_id = int(callback.data.split('_')[-1])
@@ -3719,7 +3767,7 @@ async def give_kick_right(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("✅ Право успешно выдано!")
 
 @dp.callback_query(F.data.startswith("give_ban_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def give_ban_right(callback: CallbackQuery, state: FSMContext):
     target_id = int(callback.data.split('_')[-1])
@@ -3730,7 +3778,7 @@ async def give_ban_right(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("✅ Право успешно выдано!")
 
 @dp.callback_query(F.data.startswith("give_warn_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def give_warn_right(callback: CallbackQuery, state: FSMContext):
     target_id = int(callback.data.split('_')[-1])
@@ -3741,7 +3789,7 @@ async def give_warn_right(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("✅ Право успешно выдано!")
 
 @dp.callback_query(F.data == "list_moderators")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def list_moderators(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3772,7 +3820,7 @@ async def list_moderators(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "manage_rules")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def manage_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3791,7 +3839,7 @@ async def manage_rules(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "set_rules")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3834,7 +3882,7 @@ async def process_rules_text(message: Message, state: FSMContext):
     await state.clear()
 
 @dp.callback_query(F.data == "set_default_rules")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_default_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3848,7 +3896,7 @@ async def set_default_rules(callback: CallbackQuery, state: FSMContext):
     await manage_rules(callback, state)
 
 @dp.callback_query(F.data == "show_rules")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def show_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3871,7 +3919,7 @@ async def show_rules(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "edit_rules")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def edit_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3907,7 +3955,7 @@ async def process_edit_rules_text(message: Message, state: FSMContext):
     await state.clear()
 
 @dp.callback_query(F.data == "delete_rules_confirm")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def delete_rules_confirm(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3923,7 +3971,7 @@ async def delete_rules_confirm(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "delete_rules")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def delete_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3936,7 +3984,7 @@ async def delete_rules(callback: CallbackQuery, state: FSMContext):
     await manage_rules(callback, state)
 
 @dp.callback_query(F.data == "toggle_rules")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3951,7 +3999,7 @@ async def toggle_rules(callback: CallbackQuery, state: FSMContext):
     await manage_rules(callback, state)
 
 @dp.callback_query(F.data == "manage_welcome")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def manage_welcome(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3967,7 +4015,7 @@ async def manage_welcome(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_welcome")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_welcome(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3981,7 +4029,7 @@ async def toggle_welcome(callback: CallbackQuery, state: FSMContext):
     await manage_welcome(callback, state)
 
 @dp.callback_query(F.data == "set_welcome_text")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_welcome_text(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4022,7 +4070,7 @@ async def process_welcome_text(message: Message, state: FSMContext):
     await state.clear()
 
 @dp.callback_query(F.data == "set_welcome_photo")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_welcome_photo(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4059,7 +4107,7 @@ async def process_welcome_photo_invalid(message: Message, state: FSMContext):
     await message.answer("❌ Пожалуйста, отправьте фото!")
 
 @dp.callback_query(F.data == "show_welcome")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def show_welcome(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4092,7 +4140,7 @@ async def show_welcome(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "rules_auto")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def rules_auto(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4110,7 +4158,7 @@ async def rules_auto(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_rules_auto")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_rules_auto(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4125,7 +4173,7 @@ async def toggle_rules_auto(callback: CallbackQuery, state: FSMContext):
     await rules_auto(callback, state)
 
 @dp.callback_query(F.data == "set_interval")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_interval(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4165,7 +4213,7 @@ async def process_interval(message: Message, state: FSMContext):
         await message.answer("❌ Пожалуйста, введите число!")
 
 @dp.callback_query(F.data == "antiflood_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def antiflood_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4191,7 +4239,7 @@ async def antiflood_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_antiflood")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_antiflood(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4206,7 +4254,7 @@ async def toggle_antiflood(callback: CallbackQuery, state: FSMContext):
     await antiflood_manage(callback, state)
 
 @dp.callback_query(F.data == "set_msg_limit")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_msg_limit(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4245,7 +4293,7 @@ async def process_msg_limit(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_media_limit")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_media_limit(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4284,7 +4332,7 @@ async def process_media_limit(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_window")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_window(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4323,7 +4371,7 @@ async def process_window(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_warn_count")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_warn_count(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4362,7 +4410,7 @@ async def process_warn_count(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_first_punish")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_first_punish(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4376,7 +4424,7 @@ async def set_first_punish(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "set_repeat_punish")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_repeat_punish(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4390,7 +4438,7 @@ async def set_repeat_punish(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "set_punish_after_warn")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_punish_after_warn(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4404,7 +4452,7 @@ async def set_punish_after_warn(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("punish_warn_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def punish_warn(callback: CallbackQuery, state: FSMContext):
     punish_type = callback.data.split('_')[-1]
@@ -4425,7 +4473,7 @@ async def punish_warn(callback: CallbackQuery, state: FSMContext):
     await antiflood_manage(callback, state)
 
 @dp.callback_query(F.data.startswith("punish_mute_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def punish_mute(callback: CallbackQuery, state: FSMContext):
     punish_type = callback.data.split('_')[-1]
@@ -4443,7 +4491,7 @@ async def punish_mute(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("punish_kick_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def punish_kick(callback: CallbackQuery, state: FSMContext):
     punish_type = callback.data.split('_')[-1]
@@ -4462,7 +4510,7 @@ async def punish_kick(callback: CallbackQuery, state: FSMContext):
     await antiflood_manage(callback, state)
 
 @dp.callback_query(F.data.startswith("punish_ban_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def punish_ban(callback: CallbackQuery, state: FSMContext):
     punish_type = callback.data.split('_')[-1]
@@ -4518,7 +4566,7 @@ async def process_punish_duration(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "auto_response_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def auto_response_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4540,7 +4588,7 @@ async def auto_response_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "add_auto_trigger")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def add_auto_trigger(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4626,7 +4674,7 @@ async def process_auto_response(message: Message, state: FSMContext):
     await state.clear()
 
 @dp.callback_query(F.data == "remove_auto_trigger")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def remove_auto_trigger(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4645,7 +4693,7 @@ async def remove_auto_trigger(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("rem_trig_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def process_remove_trigger(callback: CallbackQuery, state: FSMContext):
     index = int(callback.data.split('_')[-1])
@@ -4664,7 +4712,7 @@ async def process_remove_trigger(callback: CallbackQuery, state: FSMContext):
     await auto_response_manage(callback, state)
 
 @dp.callback_query(F.data == "links_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def links_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4683,7 +4731,7 @@ async def links_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_links")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def toggle_links(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4698,7 +4746,7 @@ async def toggle_links(callback: CallbackQuery, state: FSMContext):
     await links_manage(callback, state)
 
 @dp.callback_query(F.data == "set_links_punish")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_links_punish(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4712,7 +4760,7 @@ async def set_links_punish(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "links_punish_warn")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def links_punish_warn(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4725,7 +4773,7 @@ async def links_punish_warn(callback: CallbackQuery, state: FSMContext):
     await links_manage(callback, state)
 
 @dp.callback_query(F.data == "links_punish_mute")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def links_punish_mute(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4742,7 +4790,7 @@ async def links_punish_mute(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "links_punish_kick")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def links_punish_kick(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4755,7 +4803,7 @@ async def links_punish_kick(callback: CallbackQuery, state: FSMContext):
     await links_manage(callback, state)
 
 @dp.callback_query(F.data == "links_punish_ban")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def links_punish_ban(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4799,7 +4847,7 @@ async def process_links_duration(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_max_mentions")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_max_mentions(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4838,7 +4886,7 @@ async def process_max_mentions(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_mention_window")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def set_mention_window(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4877,7 +4925,7 @@ async def process_mention_window(message: Message, state: FSMContext):
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "confirmation_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def confirmation_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4905,7 +4953,7 @@ async def confirmation_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("confirmation_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def process_confirmation_type(callback: CallbackQuery, state: FSMContext):
     conf_type = callback.data.replace("confirmation_", "")
@@ -4933,7 +4981,7 @@ async def process_confirmation_type(callback: CallbackQuery, state: FSMContext):
     await confirmation_manage(callback, state)
 
 @dp.callback_query(F.data == "unlink_group_confirm")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def unlink_group_confirm(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4948,7 +4996,7 @@ async def unlink_group_confirm(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("unlink_group_"))
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def unlink_group(callback: CallbackQuery, state: FSMContext):
     chat_id = int(callback.data.split('_')[-1])
@@ -4962,7 +5010,7 @@ async def unlink_group(callback: CallbackQuery, state: FSMContext):
     await cmd_start(callback.message, state)
 
 @dp.callback_query(F.data == "group_manage")
-@anti_button_flood()
+@edit_only()
 @check_owner()
 async def back_to_group_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -4982,7 +5030,7 @@ async def back_to_group_manage(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("show_group_rules_"))
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def show_group_rules(callback: CallbackQuery):
     chat_id = int(callback.data.split('_')[-1])
@@ -4994,7 +5042,7 @@ async def show_group_rules(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("my_stats_"))
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def my_stats(callback: CallbackQuery):
     chat_id = int(callback.data.split('_')[-1])
@@ -5030,7 +5078,7 @@ async def my_stats(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("top_active_"))
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def top_active(callback: CallbackQuery):
     chat_id = int(callback.data.split('_')[-1])
@@ -5064,7 +5112,7 @@ async def top_active(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "about")
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def about(callback: CallbackQuery):
     is_admin = callback.from_user.id in ADMIN_IDS
@@ -5091,7 +5139,7 @@ async def about(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "help")
-@anti_button_flood()
+@edit_only()
 @check_public()
 async def help(callback: CallbackQuery):
     is_admin = callback.from_user.id in ADMIN_IDS
@@ -5137,7 +5185,7 @@ async def help(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_panel")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_panel(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5173,7 +5221,7 @@ async def admin_panel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_spammers")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_spammers(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5205,7 +5253,7 @@ async def admin_spammers(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_maintenance")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_maintenance(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5226,14 +5274,14 @@ async def admin_maintenance(callback: CallbackQuery):
     builder.add(create_button("◀️ Назад", "admin_panel", "secondary"))
     builder.adjust(1)
     await callback.message.edit_text(
-        safe_html(text),  # ← ИЗМЕНИТЬ ЗДЕСЬ
+        safe_html(text), 
         reply_markup=builder.as_markup(), 
         parse_mode="HTML"
     )
     await callback.answer()
 
 @dp.callback_query(F.data == "maintenance_on")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def maintenance_on(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5246,7 +5294,7 @@ async def maintenance_on(callback: CallbackQuery):
     await admin_maintenance(callback)
 
 @dp.callback_query(F.data == "maintenance_off")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def maintenance_off(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5259,7 +5307,7 @@ async def maintenance_off(callback: CallbackQuery):
     await admin_maintenance(callback)
 
 @dp.callback_query(F.data == "maintenance_message")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def maintenance_message(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5300,7 +5348,7 @@ async def notify_all_groups(text):
                 pass
 
 @dp.callback_query(F.data == "admin_stats")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_stats(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5337,7 +5385,7 @@ async def admin_stats(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_groups")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_groups(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5364,7 +5412,7 @@ async def admin_groups(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_users")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_users(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5385,7 +5433,7 @@ async def admin_users(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_logs")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_logs(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5410,7 +5458,7 @@ async def admin_logs(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_logs_clear")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_logs_clear(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5428,7 +5476,7 @@ async def admin_logs_clear(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_logs_clear_confirm")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_logs_clear_confirm(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5442,7 +5490,7 @@ async def admin_logs_clear_confirm(callback: CallbackQuery):
     await admin_logs(callback)
 
 @dp.callback_query(F.data == "admin_broadcast")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_broadcast(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5487,7 +5535,7 @@ async def process_broadcast_text(message: Message, state: FSMContext):
     await state.clear()
 
 @dp.callback_query(F.data == "admin_backup")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_backup(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5505,7 +5553,7 @@ async def admin_backup(callback: CallbackQuery):
         await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
 @dp.callback_query(F.data == "admin_shutdown")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_shutdown(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -5524,7 +5572,7 @@ async def admin_shutdown(callback: CallbackQuery):
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_shutdown_confirm")
-@anti_button_flood()
+@edit_only()
 @check_bot_admin()
 async def admin_shutdown_confirm(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
