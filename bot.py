@@ -15,20 +15,8 @@ import shutil
 import re
 import html
 import json
-
-from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
-from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import Command, CommandStart, CommandObject
-from aiogram.types import (
-    Message, CallbackQuery, ChatMemberUpdated, ChatPermissions, 
-    InlineKeyboardButton, FSInputFile, InlineKeyboardMarkup,
-    ReactionTypeEmoji
-)
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.exceptions import TelegramBadRequest
+import sys
+import traceback
 
 # Настройка логирования
 logging.basicConfig(
@@ -37,20 +25,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Добавляем обработчик исключений
+def excepthook(exctype, value, tb):
+    logger.error(''.join(traceback.format_exception(exctype, value, tb)))
+
+sys.excepthook = excepthook
+
 # ========== КОНФИГУРАЦИЯ ==========
 BOT_TOKEN = "8557190026:AAEWJo-DqwgAeLyz94xbH7lXe9snUZQk30Y"
 BOT_USERNAME = "PulsOfficialManager_bot"
 ADMIN_IDS = [6708209142]
 
 MAX_TRIGGERS = 100
-MAX_TRIGGER_LENGTH = 200
+MAX_TRIGGER_LENGTH = 20
+MAX_TRIGGER_WORDS = 2
 MAX_RESPONSE_LENGTH = 4096
 
 SPAM_MESSAGE_LIMIT = 50
 SPAM_CHECK_TIME = 60
 SPAM_WARN_LIMIT = 3
 
-SUPPORT_LINK = "https://t.me/puls_support"
+SUPPORT_LINK = "https://t.me/support_puls"
 
 MAX_BUTTON_PRESSES = 3
 BUTTON_CHECK_TIME = 60
@@ -70,7 +65,6 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# ========== НОВЫЙ КЛАСС ДЛЯ КАСТОМИЗАЦИИ СООБЩЕНИЙ ==========
 class MessageTemplate:
     def __init__(self, key: str, default_text: str, default_photo: str = None):
         self.key = key
@@ -95,15 +89,12 @@ class MessageTemplate:
         self.custom_text = None
         self.custom_photo = None
 
-# ========== СИСТЕМА КАСТОМИЗАЦИИ ==========
 class MessageCustomization:
     def __init__(self):
         self.templates = {}
         self.init_defaults()
     
     def init_defaults(self):
-        """Инициализация всех сообщений бота"""
-        # Главное меню
         self.templates['welcome_pm'] = MessageTemplate(
             'welcome_pm',
             "👋 <b>Добро пожаловать в Puls Chat Manager!</b>\n\n"
@@ -129,7 +120,6 @@ class MessageCustomization:
             "• /mods - список модераторов"
         )
         
-        # Профиль
         self.templates['profile_header'] = MessageTemplate(
             'profile_header',
             "<b>Профиль {premium_emoji} {name}</b>"
@@ -190,7 +180,6 @@ class MessageCustomization:
             "📊 У пользователя пока нет сообщений в этом чате"
         )
         
-        # Топ
         self.templates['top_header'] = MessageTemplate(
             'top_header',
             "<b>🏆 Топ активных (всего сообщений):</b>"
@@ -201,7 +190,6 @@ class MessageCustomization:
             "{medal} {premium_emoji} {name} — {count} 💬{warnings}"
         )
         
-        # Приветствие
         self.templates['welcome_simple'] = MessageTemplate(
             'welcome_simple',
             "Добро пожаловать, {premium_emoji} <b>{name}</b>!\n\n"
@@ -215,7 +203,6 @@ class MessageCustomization:
             "• Место в топе: {position}"
         )
         
-        # Наказания
         self.templates['mute_message'] = MessageTemplate(
             'mute_message',
             "🔇 <b>Пользователь {name} замьючен</b>\n\n"
@@ -265,7 +252,6 @@ class MessageCustomization:
             "✅ Нарушения пользователя сняты модератором {moderator}"
         )
         
-        # Антиспам
         self.templates['spammer_detected'] = MessageTemplate(
             'spammer_detected',
             "🚫 Обнаружен спамер в базе Пульса!\n"
@@ -326,7 +312,6 @@ class MessageCustomization:
             "Причина: явный спам (50+ сообщений за минуту)"
         )
         
-        # Управление группой
         self.templates['group_linked'] = MessageTemplate(
             'group_linked',
             "✅ <b>Группа успешно привязана!</b>\n\n"
@@ -347,7 +332,6 @@ class MessageCustomization:
             "✅ Группа отвязана от вашего аккаунта."
         )
         
-        # Подтверждения
         self.templates['confirm_action'] = MessageTemplate(
             'confirm_action',
             "⚠️ <b>Подтвердите действие</b>\n\n"
@@ -366,39 +350,69 @@ class MessageCustomization:
             'action_completed',
             "✅ Действие выполнено!"
         )
+        
+        self.templates['trigger_added'] = MessageTemplate(
+            'trigger_added',
+            "✅ Триггер '{trigger}' добавлен ({count}/{max})"
+        )
+        
+        self.templates['trigger_exists'] = MessageTemplate(
+            'trigger_exists',
+            "❌ Триггер '{trigger}' уже существует"
+        )
+        
+        self.templates['trigger_limit'] = MessageTemplate(
+            'trigger_limit',
+            "❌ Достигнут лимит триггеров ({max})"
+        )
+        
+        self.templates['trigger_empty'] = MessageTemplate(
+            'trigger_empty',
+            "❌ Триггер не может быть пустым"
+        )
+        
+        self.templates['trigger_too_long'] = MessageTemplate(
+            'trigger_too_long',
+            "❌ Триггер слишком длинный! Максимум {max_len} символов"
+        )
+        
+        self.templates['trigger_too_many_words'] = MessageTemplate(
+            'trigger_too_many_words',
+            "❌ Триггер должен содержать максимум {max_words} слова"
+        )
+        
+        self.templates['trigger_removed'] = MessageTemplate(
+            'trigger_removed',
+            "✅ Триггер '{trigger}' удалён!"
+        )
     
     def get_template(self, key: str) -> MessageTemplate:
-        """Получает шаблон по ключу"""
         return self.templates.get(key)
     
     def format_message(self, key: str, **kwargs) -> str:
-        """Форматирует сообщение по шаблону"""
         template = self.get_template(key)
         if template:
             try:
                 return template.get_text().format(**kwargs)
-            except:
+            except Exception as e:
+                logger.error(f"Ошибка форматирования {key}: {e}")
                 return template.get_text()
         return ""
     
     def get_photo(self, key: str) -> Optional[str]:
-        """Получает фото для шаблона"""
         template = self.get_template(key)
         if template:
             return template.get_photo()
         return None
 
-# Инициализация системы кастомизации
 customization = MessageCustomization()
 
-# ========== КЛАСС ДЛЯ АДМИН ПАНЕЛИ ==========
 class AdminCustomization:
     def __init__(self):
         self.messages = {}
         self.photos = {}
     
     def get_all_templates(self) -> List[Tuple[str, str, bool]]:
-        """Возвращает все доступные шаблоны для настройки"""
         templates = []
         for key, template in customization.templates.items():
             templates.append((
@@ -409,7 +423,6 @@ class AdminCustomization:
         return templates
     
     def update_template(self, key: str, text: str = None, photo: str = None):
-        """Обновляет шаблон"""
         template = customization.get_template(key)
         if template:
             template.set_custom(text, photo)
@@ -417,7 +430,6 @@ class AdminCustomization:
         return False
     
     def reset_template(self, key: str):
-        """Сбрасывает шаблон к дефолтному"""
         template = customization.get_template(key)
         if template:
             template.reset()
@@ -426,7 +438,6 @@ class AdminCustomization:
 
 admin_custom = AdminCustomization()
 
-# ========== ДЕКОРАТОРЫ ==========
 def check_owner():
     def decorator(func):
         @wraps(func)
@@ -495,7 +506,6 @@ def pm_only():
     return decorator
 
 def edit_only():
-    """Для кнопок, которые только редактируют текущее сообщение (без КД и уведомлений)"""
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
@@ -504,7 +514,6 @@ def edit_only():
     return decorator
 
 def action_with_flood():
-    """Для кнопок, которые отправляют новые сообщения (с КД и уведомлениями)"""
     def decorator(func):
         @wraps(func)
         async def wrapper(callback: CallbackQuery, *args, **kwargs):
@@ -665,6 +674,19 @@ def clean_text_with_emojis(text: str) -> str:
     if emojis:
         text = text + " " + " ".join(emojis)
     return text
+
+def validate_trigger(trigger: str) -> Tuple[bool, str]:
+    if not trigger:
+        return False, customization.format_message('trigger_empty')
+    
+    if len(trigger) > MAX_TRIGGER_LENGTH:
+        return False, customization.format_message('trigger_too_long', max_len=MAX_TRIGGER_LENGTH)
+    
+    words = trigger.split()
+    if len(words) > MAX_TRIGGER_WORDS:
+        return False, customization.format_message('trigger_too_many_words', max_words=MAX_TRIGGER_WORDS)
+    
+    return True, ""
 
 async def add_premium_reaction(message: Message, emoji: str = "⭐"):
     try:
@@ -916,7 +938,6 @@ class Database:
                           unbanned_in TEXT DEFAULT '[]',
                           warnings INTEGER DEFAULT 1)''')
             
-            # Таблица для кастомных сообщений
             c.execute('''CREATE TABLE IF NOT EXISTS custom_messages
                          (msg_key TEXT PRIMARY KEY,
                           custom_text TEXT,
@@ -926,7 +947,6 @@ class Database:
             c.execute('CREATE INDEX IF NOT EXISTS idx_user_stats_user ON user_stats(user_id)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_violations_time ON violation_logs(timestamp)')
             
-            # Загружаем спамеров из БД при старте
             c.execute('SELECT user_id, reason, added_at, unbanned_in, warnings FROM global_spammers')
             for row in c.fetchall():
                 user_id = row[0]
@@ -941,7 +961,6 @@ class Database:
                     "предупреждения": warnings
                 }
             
-            # Загружаем кастомные сообщения
             c.execute('SELECT msg_key, custom_text, custom_photo FROM custom_messages')
             for row in c.fetchall():
                 key = row[0]
@@ -954,7 +973,6 @@ class Database:
             conn.commit()
     
     def save_custom_message(self, key: str, text: str = None, photo: str = None):
-        """Сохраняет кастомное сообщение в БД"""
         with self.get_connection() as conn:
             c = conn.cursor()
             if text is not None or photo is not None:
@@ -978,7 +996,6 @@ class Database:
             return False
     
     def reset_custom_message(self, key: str):
-        """Сбрасывает кастомное сообщение к дефолтному"""
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute('DELETE FROM custom_messages WHERE msg_key = ?', (key,))
@@ -1165,14 +1182,16 @@ class Database:
             c.execute('SELECT COUNT(*) FROM auto_responses WHERE chat_id = ?', (chat_id,))
             count = c.fetchone()[0]
             if count >= MAX_TRIGGERS:
-                return False, f"❌ Достигнут лимит триггеров ({MAX_TRIGGERS})"
+                return False, customization.format_message('trigger_limit', max=MAX_TRIGGERS)
+            
             c.execute('SELECT 1 FROM auto_responses WHERE chat_id = ? AND trigger = ?', (chat_id, trigger))
             if c.fetchone():
-                return False, f"❌ Триггер '{trigger}' уже существует"
+                return False, customization.format_message('trigger_exists', trigger=trigger)
+            
             c.execute('INSERT INTO auto_responses (chat_id, trigger, response, response_type, media_id, created_at) VALUES (?, ?, ?, ?, ?, ?)', 
                      (chat_id, trigger, response, response_type, media_id, int(time.time())))
             conn.commit()
-            return True, f"✅ Триггер '{trigger}' добавлен ({count+1}/{MAX_TRIGGERS})"
+            return True, customization.format_message('trigger_added', trigger=trigger, count=count+1, max=MAX_TRIGGERS)
     
     def get_auto_responses(self, chat_id):
         with self.get_connection() as conn:
@@ -2111,7 +2130,6 @@ def get_confirmation_keyboard(current_type, has_rules):
     builder.adjust(1)
     return builder.as_markup()
 
-# ========== АДМИН ПАНЕЛЬ КАСТОМИЗАЦИИ ==========
 def get_admin_custom_keyboard():
     builder = InlineKeyboardBuilder()
     builder.add(create_button("📝 Тексты сообщений", "admin_custom_texts", "primary"))
@@ -2427,7 +2445,6 @@ DEFAULT_RULES = """
 Спасибо за внимание!
 """
 
-# ========== ОСНОВНЫЕ КОМАНДЫ ==========
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
@@ -2441,7 +2458,6 @@ async def cmd_start(message: Message, state: FSMContext):
     else:
         welcome_text = customization.get_template('welcome_group').get_text()
     
-    # Проверяем, есть ли фото для этого сообщения
     photo = customization.get_photo('welcome_pm' if message.chat.type == 'private' else 'welcome_group')
     
     if photo:
@@ -2696,12 +2712,10 @@ async def cmd_group(message: Message):
         )
     await add_premium_reaction(message, "⚙️")
 
-# ========== ОБРАБОТЧИК ПРИВЯЗКИ ГРУППЫ ==========
 @dp.callback_query(F.data.startswith("link_group_"))
 @edit_only()
 @check_owner()
 async def link_group(callback: CallbackQuery):
-    """Привязывает группу к пользователю"""
     chat_id = int(callback.data.split('_')[-1])
     user_id = callback.from_user.id
     
@@ -2752,7 +2766,6 @@ async def link_group(callback: CallbackQuery):
 @edit_only()
 @check_owner()
 async def cancel_link(callback: CallbackQuery):
-    """Отменяет привязку группы"""
     await callback.message.delete()
     await callback.answer()
 
@@ -3501,9 +3514,13 @@ async def handle_forwarded_chat(message: Message):
 async def handle_group_message(message: Message):
     if message.from_user.is_bot:
         return
+    
     chat_id = message.chat.id
     user_id = message.from_user.id
     text = message.text or message.caption or ""
+    
+    logger.info(f"📨 Сообщение от {user_id} в чате {chat_id}: {text[:50] if text else '[медиа]'}")
+    
     if text and len(text) < 500:
         log_text = (
             f"<b>💬 Сообщение</b>\n\n"
@@ -3511,38 +3528,58 @@ async def handle_group_message(message: Message):
             f"📝 {safe_html(text[:200])}{'...' if len(text) > 200 else ''}"
         )
         await send_to_log_group(chat_id, 'message', log_text)
+    
     if text:
-        emojis = extract_emojis(text)
-        cleaned_text = clean_text_with_emojis(text)
+        cleaned_text = text.lower().strip()
+        logger.info(f"🔍 Поиск триггера для: {cleaned_text}")
+        
         responses = db.get_auto_responses(chat_id)
+        logger.info(f"📋 Найдено триггеров: {len(responses)}")
+        
+        found = False
         for trigger, response, response_type, media_id in responses:
-            if trigger == cleaned_text or trigger == text.lower():
+            trigger_lower = trigger.lower().strip()
+            logger.info(f"  Проверка триггера: '{trigger_lower}' vs '{cleaned_text}'")
+            
+            if trigger_lower == cleaned_text:
+                logger.info(f"✅ Точное совпадение найдено! Тип: {response_type}")
                 try:
                     if response_type == 'text':
-                        await message.reply(safe_html(response), parse_mode="HTML", disable_notification=True)
+                        await message.reply(response, parse_mode="HTML", disable_notification=True)
+                        logger.info("✅ Текстовый ответ отправлен")
                     elif response_type == 'photo' and media_id:
-                        await message.reply_photo(media_id, caption=safe_html(response), parse_mode="HTML")
+                        await message.reply_photo(media_id, caption=response, parse_mode="HTML")
+                        logger.info("✅ Фото ответ отправлен")
                     elif response_type == 'animation' and media_id:
-                        await message.reply_animation(media_id, caption=safe_html(response), parse_mode="HTML")
+                        await message.reply_animation(media_id, caption=response, parse_mode="HTML")
+                        logger.info("✅ GIF ответ отправлен")
                     elif response_type == 'sticker' and media_id:
                         await message.reply_sticker(media_id)
-                except:
-                    await message.reply(safe_html(response), disable_notification=True)
-                break
-        else:
+                        logger.info("✅ Стикер ответ отправлен")
+                    found = True
+                    break
+                except Exception as e:
+                    logger.error(f"❌ Ошибка отправки: {e}")
+        
+        if not found:
+            logger.info("🔍 Точных совпадений нет, ищем вхождение...")
             for trigger, response, response_type, media_id in responses:
-                if trigger in cleaned_text or trigger in text.lower():
+                trigger_lower = trigger.lower().strip()
+                if trigger_lower in cleaned_text:
+                    logger.info(f"✅ Найдено вхождение: '{trigger_lower}' в '{cleaned_text}'")
                     try:
                         if response_type == 'text':
-                            await message.reply(safe_html(response), parse_mode="HTML", disable_notification=True)
+                            await message.reply(response, parse_mode="HTML", disable_notification=True)
                         elif response_type == 'photo' and media_id:
-                            await message.reply_photo(media_id, caption=safe_html(response), parse_mode="HTML")
+                            await message.reply_photo(media_id, caption=response, parse_mode="HTML")
                         elif response_type == 'animation' and media_id:
-                            await message.reply_animation(media_id, caption=safe_html(response), parse_mode="HTML")
+                            await message.reply_animation(media_id, caption=response, parse_mode="HTML")
                         elif response_type == 'sticker' and media_id:
                             await message.reply_sticker(media_id)
-                    except:
-                        await message.reply(safe_html(response), disable_notification=True)
+                        logger.info("✅ Ответ отправлен")
+                        break
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка отправки: {e}")
                     break
 
 @dp.message(Command("adminstats"))
@@ -5305,7 +5342,7 @@ async def add_auto_trigger(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"❌ Достигнут лимит триггеров ({MAX_TRIGGERS})!", show_alert=True)
         return
     await callback.message.edit_text(
-        f"📝 Введите ключевое слово (триггер).\nМакс. длина: {MAX_TRIGGER_LENGTH} символов\n\n"
+        f"📝 Введите ключевое слово (триггер).\nМакс. длина: {MAX_TRIGGER_LENGTH} символов\nМакс. слов: {MAX_TRIGGER_WORDS}\n\n"
         "Триггер будет проверяться на точное совпадение и вхождение в текст.",
         reply_markup=get_back_keyboard("auto_response_manage")
     )
@@ -5318,13 +5355,14 @@ async def process_auto_trigger(message: Message, state: FSMContext):
         await message.answer("❌ Настройки только в ЛС!")
         await state.clear()
         return
+    
     trigger = message.text.strip()
-    if not trigger:
-        await message.answer("❌ Триггер не может быть пустым!")
+    
+    is_valid, error_msg = validate_trigger(trigger)
+    if not is_valid:
+        await message.answer(error_msg)
         return
-    if len(trigger) > MAX_TRIGGER_LENGTH:
-        await message.answer(f"❌ Триггер слишком длинный! Максимум {MAX_TRIGGER_LENGTH} символов")
-        return
+    
     await state.update_data(auto_trigger=trigger)
     await message.reply(
         f"📝 Введите ответ для триггера '{safe_html(trigger)}'.\n"
@@ -5344,22 +5382,31 @@ async def process_auto_response(message: Message, state: FSMContext):
         await message.answer("❌ Настройки только в ЛС!")
         await state.clear()
         return
+    
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     trigger = data.get('auto_trigger')
+    
     if not chat_id or not trigger or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
         return
+    
     response_type = 'text'
-    response = message.html_text.strip() if message.text else (message.caption or "").strip()
+    response = ""
     media_id = None
-    if message.photo:
+    
+    if message.text:
+        response_type = 'text'
+        response = message.html_text.strip()
+    elif message.photo:
         response_type = 'photo'
         media_id = message.photo[-1].file_id
+        response = message.caption or ""
     elif message.animation:
         response_type = 'animation'
         media_id = message.animation.file_id
+        response = message.caption or ""
     elif message.sticker:
         response_type = 'sticker'
         media_id = message.sticker.file_id
@@ -5367,12 +5414,18 @@ async def process_auto_response(message: Message, state: FSMContext):
     elif message.video:
         response_type = 'animation'
         media_id = message.video.file_id
+        response = message.caption or ""
+    
     if response_type == 'text' and not response:
         await message.answer("❌ Ответ не может быть пустым!")
         return
+    
     if len(response) > MAX_RESPONSE_LENGTH:
         await message.answer(f"❌ Ответ слишком длинный! Максимум {MAX_RESPONSE_LENGTH} символов")
         return
+    
+    logger.info(f"📝 Добавление триггера: {trigger}, тип: {response_type}, media_id: {media_id}")
+    
     success, msg = db.add_auto_response(chat_id, trigger, response, response_type, media_id)
     await message.reply(msg)
     await add_premium_reaction(message, "✅" if success else "❌")
@@ -5649,12 +5702,16 @@ async def confirmation_manage(callback: CallbackQuery, state: FSMContext):
     warning = ""
     if (conf_type in ['rules', 'both']) and not has_rules:
         warning = "\n\n⚠️ <b>Внимание:</b> Правила не установлены. Эта настройка не будет работать."
-    await callback.message.edit_text(
-        f"✅ <b>Настройки подтверждения</b>\n\n"
-        f"Тип: {type_names.get(conf_type, conf_type)}{warning}",
-        reply_markup=get_confirmation_keyboard(conf_type, has_rules),
-        parse_mode="HTML"
-    )
+    
+    current_text = callback.message.text or callback.message.caption
+    new_text = f"✅ <b>Настройки подтверждения</b>\n\nТип: {type_names.get(conf_type, conf_type)}{warning}"
+    
+    if current_text != new_text:
+        await callback.message.edit_text(
+            new_text,
+            reply_markup=get_confirmation_keyboard(conf_type, has_rules),
+            parse_mode="HTML"
+        )
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("confirmation_"))
@@ -5866,7 +5923,7 @@ async def about(callback: CallbackQuery):
         "• Авто-рассылка\n"
         "• Антифлуд (текст/медиа)\n"
         "• Антиспам Пульса (глобальная база спамеров)\n"
-        "• Автоответчик (до 100 триггеров)\n"
+        "• Автоответчик (до 100 триггеров, макс 2 слова, 20 символов)\n"
         "• Статистика сообщений\n"
         "• Приветствия\n"
         "• Система модерации (мут/бан/кик/варн)\n"
@@ -5927,7 +5984,6 @@ async def help(callback: CallbackQuery):
     )
     await callback.answer()
 
-# ========== АДМИН ПАНЕЛЬ ==========
 @dp.callback_query(F.data == "admin_panel")
 @edit_only()
 @check_bot_admin()
@@ -6065,14 +6121,10 @@ async def process_new_text(message: Message, state: FSMContext):
         await message.answer("❌ Отправьте текст или фото с подписью!")
         return
     
-    # Обновляем шаблон
     template = customization.get_template(msg_key)
     if template:
         template.set_custom(new_text if new_text else None, photo_id)
-        
-        # Сохраняем в БД
         db.save_custom_message(msg_key, new_text if new_text else None, photo_id)
-        
         await message.answer(f"✅ Сообщение <code>{msg_key}</code> обновлено!")
         await add_premium_reaction(message, "✅")
     else:
@@ -6155,14 +6207,10 @@ async def process_new_photo(message: Message, state: FSMContext):
     
     photo_id = message.photo[-1].file_id
     
-    # Обновляем шаблон
     template = customization.get_template(msg_key)
     if template:
         template.set_custom(photo=photo_id)
-        
-        # Сохраняем в БД
         db.save_custom_message(msg_key, photo=photo_id)
-        
         await message.answer(f"✅ Фото для <code>{msg_key}</code> обновлено!")
         await add_premium_reaction(message, "✅")
     else:
@@ -6185,14 +6233,10 @@ async def reset_photo(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    # Сбрасываем фото
     template = customization.get_template(msg_key)
     if template:
         template.reset()
-        
-        # Удаляем из БД
         db.reset_custom_message(msg_key)
-        
         await message.answer(f"✅ Фото для <code>{msg_key}</code> сброшено к стандартному!")
         await add_premium_reaction(message, "✅")
     else:
@@ -6232,7 +6276,6 @@ async def admin_custom_reset_confirm(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     
-    # Сбрасываем все шаблоны
     for key, template in customization.templates.items():
         template.reset()
         db.reset_custom_message(key)
