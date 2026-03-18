@@ -200,7 +200,7 @@ class MessageCustomization:
             "• Username: @{username}\n"
             "• Telegram ID: <code>{user_id}</code>\n"
             "• Вошёл: {join_dt}\n"
-            "• {BOT_USERNAME}
+            "• {BOT_USERNAME}\n"
         )
         
         self.templates['mute_message'] = MessageTemplate(
