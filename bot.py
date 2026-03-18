@@ -38,17 +38,17 @@ ADMIN_IDS = [6708209142]
 
 MAX_TRIGGERS = 100
 MAX_TRIGGER_LENGTH = 20
-MAX_TRIGGER_WORDS = 2
-MAX_RESPONSE_LENGTH = 4096
+MAX_TRIGGER_WORDS = 1
+MAX_RESPONSE_LENGTH = 4000
 
-SPAM_MESSAGE_LIMIT = 50
-SPAM_CHECK_TIME = 60
+SPAM_MESSAGE_LIMIT = 30
+SPAM_CHECK_TIME = 30
 SPAM_WARN_LIMIT = 3
 
 SUPPORT_LINK = "https://t.me/support_puls"
 
 MAX_BUTTON_PRESSES = 3
-BUTTON_CHECK_TIME = 60
+BUTTON_CHECK_TIME = 30
 
 SERVER_TZ = datetime.now().astimezone().tzinfo
 
@@ -200,7 +200,7 @@ class MessageCustomization:
             "• Username: @{username}\n"
             "• Telegram ID: <code>{user_id}</code>\n"
             "• Вошёл: {join_dt}\n"
-            "• Место в топе: {position}"
+            "• {BOT_USERNAME}
         )
         
         self.templates['mute_message'] = MessageTemplate(
