@@ -18,6 +18,20 @@ import json
 import sys
 import traceback
 
+from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
+from aiogram.client.default import DefaultBotProperties
+from aiogram.filters import Command, CommandStart, CommandObject
+from aiogram.types import (
+    Message, CallbackQuery, ChatMemberUpdated, ChatPermissions, 
+    InlineKeyboardButton, FSInputFile, InlineKeyboardMarkup,
+    ReactionTypeEmoji
+)
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
