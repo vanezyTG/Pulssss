@@ -3,7 +3,7 @@ import logging
 import time
 import random
 import string
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from typing import Optional, Tuple, List, Dict, Any
 import sqlite3
 from contextlib import contextmanager
@@ -23,8 +23,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     Message, CallbackQuery, ChatMemberUpdated, ChatPermissions, 
-    InlineKeyboardButton, FSInputFile, InlineKeyboardMarkup,
-    ReactionTypeEmoji
+    InlineKeyboardButton, FSInputFile, ReactionTypeEmoji
 )
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -220,7 +219,10 @@ class I18n:
                 "custom_reset_all": "✅ Все настройки сброшены!",
                 "custom_text_updated": "✅ Текст обновлен!",
                 "custom_photo_updated": "✅ Фото обновлено!",
-                "select_message": "📝 Выберите сообщение:"
+                "select_message": "📝 Выберите сообщение:",
+                "action_cancelled": "❌ Действие отменено",
+                "action_completed": "✅ Действие выполнено!",
+                "confirm_action": "⚠️ <b>Подтвердите действие</b>\n\nВы хотите {action} {name}\n{duration_line}Причина: {reason}\n\nПодтвердите действие:"
             },
             "en": {
                 "main_menu_title": "👋 <b>Main Menu</b>\n\nSelect a section:",
@@ -363,7 +365,10 @@ class I18n:
                 "custom_reset_all": "✅ All settings reset!",
                 "custom_text_updated": "✅ Text updated!",
                 "custom_photo_updated": "✅ Photo updated!",
-                "select_message": "📝 Select message:"
+                "select_message": "📝 Select message:",
+                "action_cancelled": "❌ Action cancelled",
+                "action_completed": "✅ Action completed!",
+                "confirm_action": "⚠️ <b>Confirm action</b>\n\nDo you want to {action} {name}\n{duration_line}Reason: {reason}\n\nConfirm:"
             }
         }
     
@@ -553,7 +558,7 @@ async def add_premium_reaction(message: Message, emoji: str = "⭐"):
     except:
         pass
 
-def create_button(text: str, callback_data: str, color: str = None):
+def create_button(text: str, callback_data: str):
     return InlineKeyboardButton(text=text, callback_data=callback_data)
 
 def get_back_keyboard(callback_data):
@@ -919,7 +924,8 @@ class Database:
                 rules_auto_enabled INTEGER DEFAULT 0, rules_interval INTEGER DEFAULT 300,
                 last_rules_message_id INTEGER, last_rules_time INTEGER, chat_title TEXT, chat_username TEXT,
                 confirmation_type TEXT DEFAULT 'not_bot', puls_antispam_enabled INTEGER DEFAULT 1,
-                confirm_ban INTEGER DEFAULT 0, confirm_kick INTEGER DEFAULT 0, confirm_mute INTEGER DEFAULT 0)''')
+                confirm_ban INTEGER DEFAULT 0, confirm_kick INTEGER DEFAULT 0, confirm_mute INTEGER DEFAULT 0,
+                report_group_id INTEGER, log_group_id INTEGER)''')
             c.execute('''CREATE TABLE IF NOT EXISTS global_users (user_id INTEGER PRIMARY KEY, global_id TEXT UNIQUE,
                 first_seen INTEGER, username TEXT, full_name TEXT, is_premium INTEGER DEFAULT 0)''')
             c.execute('''CREATE TABLE IF NOT EXISTS auto_responses (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -972,6 +978,23 @@ class Database:
                 action_result TEXT, timestamp INTEGER)''')
             c.execute('CREATE INDEX IF NOT EXISTS idx_user_stats_chat ON user_stats(chat_id)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_user_stats_user ON user_stats(user_id)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_violations_time ON violation_logs(timestamp)')
+            c.execute('SELECT user_id, reason, added_at, unbanned_in, warnings FROM global_spammers')
+            for row in c.fetchall():
+                user_id = row[0]
+                reason = row[1]
+                added_at = row[2]
+                unbanned_in = set(json.loads(row[3])) if row[3] else set()
+                warnings = row[4] or 1
+                global_spammers[user_id] = {"причина": reason, "когда_добавлен": added_at, "разбанен_в": unbanned_in, "предупреждения": warnings}
+            c.execute('SELECT msg_key, custom_text, custom_photo FROM custom_messages')
+            for row in c.fetchall():
+                key = row[0]
+                custom_text = row[1]
+                custom_photo = row[2]
+                template = customization.get_template(key)
+                if template:
+                    template.set_custom(custom_text, custom_photo)
             conn.commit()
     
     def get_group_language(self, chat_id):
@@ -1250,14 +1273,14 @@ class Database:
             c.execute('SELECT COUNT(*) FROM auto_responses WHERE chat_id = ?', (chat_id,))
             count = c.fetchone()[0]
             if count >= MAX_TRIGGERS:
-                return False, i18n.get('trigger_limit', get_group_language(chat_id), max=MAX_TRIGGERS)
+                return False, i18n.get('trigger_limit', self.get_group_language(chat_id), max=MAX_TRIGGERS)
             c.execute('SELECT 1 FROM auto_responses WHERE chat_id = ? AND trigger = ?', (chat_id, trigger))
             if c.fetchone():
-                return False, i18n.get('trigger_exists', get_group_language(chat_id), trigger=trigger)
+                return False, i18n.get('trigger_exists', self.get_group_language(chat_id), trigger=trigger)
             c.execute('INSERT INTO auto_responses (chat_id, trigger, response, response_type, media_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
                      (chat_id, trigger, response, response_type, media_id, int(time.time())))
             conn.commit()
-            return True, i18n.get('trigger_added', get_group_language(chat_id), trigger=trigger, count=count+1, max=MAX_TRIGGERS)
+            return True, i18n.get('trigger_added', self.get_group_language(chat_id), trigger=trigger, count=count+1, max=MAX_TRIGGERS)
     
     def get_auto_responses(self, chat_id):
         with self.get_connection() as conn:
@@ -1304,7 +1327,7 @@ class Database:
             c.execute('SELECT confirm_ban, confirm_kick, confirm_mute FROM group_rules WHERE chat_id = ?', (chat_id,))
             row = c.fetchone()
             if row:
-                return {'ban': bool(row[0]), 'kick': bool(row[1]), 'mute': bool(row[2)]}
+                return {'ban': bool(row[0]), 'kick': bool(row[1]), 'mute': bool(row[2])}
             return {'ban': False, 'kick': False, 'mute': False}
     
     def set_confirmation_setting(self, chat_id, action, enabled):
@@ -1404,14 +1427,41 @@ class Database:
             c.execute('SELECT chat_id, chat_title, chat_username FROM group_rules')
             return c.fetchall()
     
-    def get_report_group(self, chat_id):
-        return None
-    
-    def set_report_group(self, chat_id, report_group_id):
-        pass
-    
     def log_violation(self, chat_id, user_id, user_name, reason, punishment, message_id, message_link):
-        pass
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('INSERT INTO violation_logs (chat_id, user_id, user_name, reason, punishment, message_id, message_link, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                     (chat_id, user_id, user_name, reason, punishment, message_id, message_link, int(time.time())))
+            conn.commit()
+    
+    def save_custom_message(self, key: str, text: str = None, photo: str = None):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            if text is not None or photo is not None:
+                existing = c.execute('SELECT 1 FROM custom_messages WHERE msg_key = ?', (key,)).fetchone()
+                if existing:
+                    updates = []
+                    params = []
+                    if text is not None:
+                        updates.append("custom_text = ?")
+                        params.append(text)
+                    if photo is not None:
+                        updates.append("custom_photo = ?")
+                        params.append(photo)
+                    params.append(key)
+                    c.execute(f'UPDATE custom_messages SET {", ".join(updates)} WHERE msg_key = ?', params)
+                else:
+                    c.execute('INSERT INTO custom_messages (msg_key, custom_text, custom_photo) VALUES (?, ?, ?)', (key, text, photo))
+                conn.commit()
+                return True
+            return False
+    
+    def reset_custom_message(self, key: str):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('DELETE FROM custom_messages WHERE msg_key = ?', (key,))
+            conn.commit()
+            return True
 
 db = Database()
 
@@ -1430,6 +1480,38 @@ def get_group_language(chat_id):
 
 def get_user_language(user_id):
     return db.get_user_language(user_id)
+
+async def send_simple_welcome(chat_id, user):
+    is_premium = getattr(user, 'is_premium', False)
+    global_user_data = db.get_global_user(user.id)
+    if not global_user_data:
+        global_user_data = {'global_id': generate_user_id(), 'first_seen': int(time.time()), 'is_premium': is_premium}
+    stat = db.get_user_stat(chat_id, user.id)
+    position = db.get_user_position(chat_id, user.id)
+    premium_emoji = get_premium_status_emoji(global_user_data['is_premium'])
+    premium_line = customization.format_message('profile_premium') + "\n" if global_user_data['is_premium'] else ""
+    
+    welcome_text = customization.format_message(
+        'welcome_simple',
+        premium_emoji=premium_emoji,
+        name=safe_html(user.full_name, False),
+        global_id=global_user_data['global_id'],
+        first_seen=format_datetime(global_user_data['first_seen']),
+        premium_line=premium_line,
+        warnings=0,
+        limit=SPAM_WARN_LIMIT,
+        username=user.username or 'нет',
+        user_id=user.id,
+        join_dt=format_datetime(int(time.time())),
+        position=position
+    )
+    
+    welcome_text_custom, welcome_photo = db.get_welcome(chat_id)
+    
+    if welcome_photo:
+        await bot.send_photo(chat_id, photo=welcome_photo, caption=welcome_text + (f"\n\n{safe_html(welcome_text_custom, False)}" if welcome_text_custom else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
+    else:
+        await bot.send_message(chat_id, welcome_text + (f"\n\n{safe_html(welcome_text_custom, False)}" if welcome_text_custom else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
 
 async def check_blacklist(user_id):
     with db.get_connection() as conn:
@@ -1547,38 +1629,6 @@ async def apply_global_mute(user_id, reason, duration=0):
             except:
                 pass
 
-async def send_simple_welcome(chat_id, user):
-    is_premium = getattr(user, 'is_premium', False)
-    global_user_data = db.get_global_user(user.id)
-    if not global_user_data:
-        global_user_data = {'global_id': generate_user_id(), 'first_seen': int(time.time()), 'is_premium': is_premium}
-    stat = db.get_user_stat(chat_id, user.id)
-    position = db.get_user_position(chat_id, user.id)
-    premium_emoji = get_premium_status_emoji(global_user_data['is_premium'])
-    premium_line = customization.format_message('profile_premium') + "\n" if global_user_data['is_premium'] else ""
-    
-    welcome_text = customization.format_message(
-        'welcome_simple',
-        premium_emoji=premium_emoji,
-        name=safe_html(user.full_name, False),
-        global_id=global_user_data['global_id'],
-        first_seen=format_datetime(global_user_data['first_seen']),
-        premium_line=premium_line,
-        warnings=0,
-        limit=SPAM_WARN_LIMIT,
-        username=user.username or 'нет',
-        user_id=user.id,
-        join_dt=format_datetime(int(time.time())),
-        position=position
-    )
-    
-    welcome_text_custom, welcome_photo = db.get_welcome(chat_id)
-    
-    if welcome_photo:
-        await bot.send_photo(chat_id, photo=welcome_photo, caption=welcome_text + (f"\n\n{safe_html(welcome_text_custom, False)}" if welcome_text_custom else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
-    else:
-        await bot.send_message(chat_id, welcome_text + (f"\n\n{safe_html(welcome_text_custom, False)}" if welcome_text_custom else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
-
 class RulesStates(StatesGroup):
     waiting_for_rules_text = State()
     waiting_for_interval = State()
@@ -1617,9 +1667,6 @@ class DeleteMessagesStates(StatesGroup):
 class AdminBroadcastStates(StatesGroup):
     waiting_for_target = State()
     waiting_for_message = State()
-
-class LogGroupStates(StatesGroup):
-    waiting_for_log_group_id = State()
 
 class CustomMessageStates(StatesGroup):
     waiting_for_new_text = State()
@@ -1963,8 +2010,6 @@ async def set_language(callback: CallbackQuery, state: FSMContext):
     await callback.answer(i18n.get('language_changed', group_lang, language=i18n.get(f"language_{new_lang}", group_lang)), show_alert=True)
     await language_settings(callback, state)
 
-# ============ MANAGE RULES HANDLERS ============
-
 @dp.callback_query(F.data == "manage_rules")
 async def manage_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -1981,11 +2026,13 @@ async def manage_rules(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "set_rules")
 async def set_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
-    await callback.message.edit_text(i18n.get('enter_trigger', group_lang), reply_markup=get_back_keyboard("manage_rules"))
+    group_lang = get_group_language(chat_id)
+    await callback.message.edit_text(i18n.get('enter_welcome_text', group_lang), reply_markup=get_back_keyboard("manage_rules"))
+    await state.update_data(setting_rules_chat_id=chat_id)
     await state.set_state(RulesStates.waiting_for_rules_text)
     await callback.answer()
 
@@ -1996,7 +2043,7 @@ async def process_rules_text(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_rules_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2043,11 +2090,13 @@ async def show_rules(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "edit_rules")
 async def edit_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
-    await callback.message.edit_text(i18n.get('enter_trigger', group_lang), reply_markup=get_back_keyboard("manage_rules"))
+    group_lang = get_group_language(chat_id)
+    await callback.message.edit_text(i18n.get('enter_welcome_text', group_lang), reply_markup=get_back_keyboard("manage_rules"))
+    await state.update_data(setting_rules_chat_id=chat_id)
     await state.set_state(RulesStates.waiting_for_new_rules_text)
     await callback.answer()
 
@@ -2058,7 +2107,7 @@ async def process_edit_rules_text(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_rules_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2112,8 +2161,6 @@ async def toggle_rules(callback: CallbackQuery, state: FSMContext):
     await callback.answer(i18n.get('rules_toggled', group_lang, enabled=not current), show_alert=True)
     await manage_rules(callback, state)
 
-# ============ MANAGE WELCOME HANDLERS ============
-
 @dp.callback_query(F.data == "manage_welcome")
 async def manage_welcome(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -2142,11 +2189,13 @@ async def toggle_welcome(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "set_welcome_text")
 async def set_welcome_text(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_welcome_text', group_lang), reply_markup=get_back_keyboard("manage_welcome"))
+    await state.update_data(setting_welcome_chat_id=chat_id)
     await state.set_state(WelcomeStates.waiting_for_welcome_text)
     await callback.answer()
 
@@ -2157,7 +2206,7 @@ async def process_welcome_text(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_welcome_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2175,11 +2224,13 @@ async def process_welcome_text(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "set_welcome_photo")
 async def set_welcome_photo(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_welcome_photo', group_lang), reply_markup=get_back_keyboard("manage_welcome"))
+    await state.update_data(setting_welcome_chat_id=chat_id)
     await state.set_state(WelcomeStates.waiting_for_welcome_photo)
     await callback.answer()
 
@@ -2190,7 +2241,7 @@ async def process_welcome_photo(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_welcome_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2226,8 +2277,6 @@ async def show_welcome(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(f"👋 <b>Текущее приветствие:</b>\n\n{safe_html(text, False)}", reply_markup=get_back_keyboard("manage_welcome"), parse_mode="HTML")
     await callback.answer()
 
-# ============ AUTO BROADCAST HANDLERS ============
-
 @dp.callback_query(F.data == "rules_auto")
 async def rules_auto(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -2257,11 +2306,13 @@ async def toggle_rules_auto(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "set_interval")
 async def set_interval(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_interval', group_lang), reply_markup=get_back_keyboard("rules_auto"))
+    await state.update_data(setting_interval_chat_id=chat_id)
     await state.set_state(RulesStates.waiting_for_interval)
     await callback.answer()
 
@@ -2272,7 +2323,7 @@ async def process_interval(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_interval_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2290,8 +2341,6 @@ async def process_interval(message: Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("❌ Введите число!")
-
-# ============ ANTIFLOOD HANDLERS ============
 
 @dp.callback_query(F.data == "antiflood_manage")
 async def antiflood_manage(callback: CallbackQuery, state: FSMContext):
@@ -2322,11 +2371,13 @@ async def toggle_antiflood(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "set_msg_limit")
 async def set_msg_limit(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_msg_limit', group_lang), reply_markup=get_back_keyboard("antiflood_manage"))
+    await state.update_data(setting_antiflood_chat_id=chat_id)
     await state.set_state(AntiFloodStates.waiting_for_message_limit)
     await callback.answer()
 
@@ -2337,7 +2388,7 @@ async def process_msg_limit(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_antiflood_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2358,11 +2409,13 @@ async def process_msg_limit(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "set_media_limit")
 async def set_media_limit(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_media_limit', group_lang), reply_markup=get_back_keyboard("antiflood_manage"))
+    await state.update_data(setting_antiflood_chat_id=chat_id)
     await state.set_state(AntiFloodStates.waiting_for_media_limit)
     await callback.answer()
 
@@ -2373,7 +2426,7 @@ async def process_media_limit(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_antiflood_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2394,11 +2447,13 @@ async def process_media_limit(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "set_window")
 async def set_window(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_window', group_lang), reply_markup=get_back_keyboard("antiflood_manage"))
+    await state.update_data(setting_antiflood_chat_id=chat_id)
     await state.set_state(AntiFloodStates.waiting_for_window)
     await callback.answer()
 
@@ -2409,7 +2464,7 @@ async def process_window(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_antiflood_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2430,11 +2485,13 @@ async def process_window(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "set_warn_count")
 async def set_warn_count(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_warn_count', group_lang), reply_markup=get_back_keyboard("antiflood_manage"))
+    await state.update_data(setting_antiflood_chat_id=chat_id)
     await state.set_state(AntiFloodStates.waiting_for_warn_count)
     await callback.answer()
 
@@ -2445,7 +2502,7 @@ async def process_warn_count(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('setting_antiflood_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -2466,30 +2523,33 @@ async def process_warn_count(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "set_first_punish")
 async def set_first_punish(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('select_punish', group_lang), reply_markup=get_punish_type_keyboard("first", group_lang))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_repeat_punish")
 async def set_repeat_punish(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('select_punish', group_lang), reply_markup=get_punish_type_keyboard("repeat", group_lang))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_punish_after_warn")
 async def set_punish_after_warn(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('select_punish', group_lang), reply_markup=get_punish_type_keyboard("after", group_lang))
     await callback.answer()
 
@@ -2519,7 +2579,7 @@ async def punish_mute(callback: CallbackQuery, state: FSMContext):
     if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    await state.update_data(punish_setting=punish_type, punish_action='mute')
+    await state.update_data(punish_setting=punish_type, punish_action='mute', punish_chat_id=chat_id)
     group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_duration', group_lang), reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(AntiFloodStates.waiting_for_duration)
@@ -2551,7 +2611,7 @@ async def punish_ban(callback: CallbackQuery, state: FSMContext):
     if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    await state.update_data(punish_setting=punish_type, punish_action='ban')
+    await state.update_data(punish_setting=punish_type, punish_action='ban', punish_chat_id=chat_id)
     group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_duration', group_lang), reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(AntiFloodStates.waiting_for_duration)
@@ -2564,7 +2624,7 @@ async def process_punish_duration(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('punish_chat_id')
     punish_setting = data.get('punish_setting')
     punish_action = data.get('punish_action')
     if not chat_id or not punish_setting or not punish_action or not await is_creator(chat_id, message.from_user.id):
@@ -2589,8 +2649,6 @@ async def process_punish_duration(message: Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("❌ Введите число!")
-
-# ============ PULS ANTISPAM HANDLERS ============
 
 @dp.callback_query(F.data == "puls_antispam_manage")
 async def puls_antispam_manage(callback: CallbackQuery, state: FSMContext):
@@ -2622,8 +2680,6 @@ async def puls_antispam_info(callback: CallbackQuery, state: FSMContext):
     group_lang = get_group_language(callback.message.chat.id)
     await callback.message.edit_text("ℹ️ <b>Антиспам Пульса</b>\n\nГлобальная система защиты от спамеров.\n\nПри 50+ сообщениях в минуту пользователь получает предупреждение.\nПри 3 предупреждениях - глобальный бан.", reply_markup=get_back_keyboard("puls_antispam_manage"))
     await callback.answer()
-
-# ============ CONFIRM ACTIONS HANDLERS ============
 
 @dp.callback_query(F.data == "confirmation_actions_manage")
 async def confirmation_actions_manage(callback: CallbackQuery, state: FSMContext):
@@ -2684,8 +2740,6 @@ async def confirmation_actions_info(callback: CallbackQuery, state: FSMContext):
     group_lang = get_group_language(callback.message.chat.id)
     await callback.message.edit_text("ℹ️ <b>Подтверждение действий</b>\n\nЕсли включено, перед выполнением действия бот спросит подтверждение.", reply_markup=get_back_keyboard("confirmation_actions_manage"))
     await callback.answer()
-
-# ============ LOG GROUP HANDLERS ============
 
 @dp.callback_query(F.data == "log_group_manage")
 async def log_group_manage(callback: CallbackQuery, state: FSMContext):
@@ -2849,8 +2903,6 @@ async def log_group_help(callback: CallbackQuery):
     await callback.message.edit_text("📋 <b>Как создать группу логов:</b>\n\n1. Создайте группу\n2. Добавьте бота\n3. Перешлите сообщение из группы в ЛС боту", reply_markup=get_back_keyboard("log_group_manage"))
     await callback.answer()
 
-# ============ AUTO RESPONSE HANDLERS ============
-
 @dp.callback_query(F.data == "auto_response_manage")
 async def auto_response_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -2872,11 +2924,13 @@ async def auto_response_manage(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "add_auto_trigger")
 async def add_auto_trigger(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_trigger', group_lang), reply_markup=get_back_keyboard("auto_response_manage"))
+    await state.update_data(auto_trigger_chat_id=chat_id)
     await state.set_state(AutoResponseStates.waiting_for_trigger)
     await callback.answer()
 
@@ -2898,8 +2952,7 @@ async def process_auto_trigger(message: Message, state: FSMContext):
         await message.answer(i18n.get('trigger_too_many_words', 'ru', max_words=MAX_TRIGGER_WORDS))
         return
     await state.update_data(auto_trigger=trigger)
-    group_lang = get_group_language(message.chat.id)
-    await message.answer(i18n.get('enter_response', group_lang), reply_markup=get_back_keyboard("auto_response_manage"))
+    await message.answer(i18n.get('enter_response', get_group_language(message.chat.id)), reply_markup=get_back_keyboard("auto_response_manage"))
     await state.set_state(AutoResponseStates.waiting_for_response)
 
 @dp.message(AutoResponseStates.waiting_for_response)
@@ -2909,7 +2962,7 @@ async def process_auto_response(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('auto_trigger_chat_id')
     trigger = data.get('auto_trigger')
     if not chat_id or not trigger or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
@@ -2977,8 +3030,6 @@ async def process_remove_trigger(callback: CallbackQuery, state: FSMContext):
     await callback.answer(i18n.get('trigger_removed', group_lang, trigger=trigger), show_alert=True)
     await auto_response_manage(callback, state)
 
-# ============ LINKS HANDLERS ============
-
 @dp.callback_query(F.data == "links_manage")
 async def links_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3008,10 +3059,11 @@ async def toggle_links(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "set_links_punish")
 async def set_links_punish(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('select_punish', group_lang), reply_markup=get_links_punish_keyboard(group_lang))
     await callback.answer()
 
@@ -3034,7 +3086,7 @@ async def links_punish_mute(callback: CallbackQuery, state: FSMContext):
     if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    await state.update_data(links_punish='mute')
+    await state.update_data(links_punish='mute', links_punish_chat_id=chat_id)
     group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_duration', group_lang), reply_markup=get_back_keyboard("links_manage"))
     await state.set_state(LinksStates.waiting_for_duration)
@@ -3059,7 +3111,7 @@ async def links_punish_ban(callback: CallbackQuery, state: FSMContext):
     if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    await state.update_data(links_punish='ban')
+    await state.update_data(links_punish='ban', links_punish_chat_id=chat_id)
     group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_duration', group_lang), reply_markup=get_back_keyboard("links_manage"))
     await state.set_state(LinksStates.waiting_for_duration)
@@ -3072,7 +3124,7 @@ async def process_links_duration(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('links_punish_chat_id')
     punish = data.get('links_punish')
     if not chat_id or not punish or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
@@ -3095,11 +3147,13 @@ async def process_links_duration(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "set_max_mentions")
 async def set_max_mentions(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_max_mentions', group_lang), reply_markup=get_back_keyboard("links_manage"))
+    await state.update_data(max_mentions_chat_id=chat_id)
     await state.set_state(LinksStates.waiting_for_max_mentions)
     await callback.answer()
 
@@ -3110,7 +3164,7 @@ async def process_max_mentions(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('max_mentions_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -3131,11 +3185,13 @@ async def process_max_mentions(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "set_mention_window")
 async def set_mention_window(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if not data.get('selected_chat_id'):
+    chat_id = data.get('selected_chat_id')
+    if not chat_id:
         await callback.answer("❌ Сначала выберите группу!", show_alert=True)
         return
-    group_lang = get_group_language(data.get('selected_chat_id'))
+    group_lang = get_group_language(chat_id)
     await callback.message.edit_text(i18n.get('enter_mention_window', group_lang), reply_markup=get_back_keyboard("links_manage"))
+    await state.update_data(mention_window_chat_id=chat_id)
     await state.set_state(LinksStates.waiting_for_mention_window)
     await callback.answer()
 
@@ -3146,7 +3202,7 @@ async def process_mention_window(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
+    chat_id = data.get('mention_window_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
         await message.answer("❌ Ошибка! Начните заново.")
         await state.clear()
@@ -3163,8 +3219,6 @@ async def process_mention_window(message: Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("❌ Введите число!")
-
-# ============ CONFIRM ENTRY HANDLERS ============
 
 @dp.callback_query(F.data == "confirmation_manage")
 async def confirmation_manage(callback: CallbackQuery, state: FSMContext):
@@ -3195,8 +3249,6 @@ async def process_confirmation_type(callback: CallbackQuery, state: FSMContext):
     group_lang = get_group_language(chat_id)
     await callback.answer(i18n.get('settings_saved', group_lang), show_alert=True)
     await confirmation_manage(callback, state)
-
-# ============ MODERATORS HANDLERS ============
 
 @dp.callback_query(F.data == "moderators_manage")
 async def moderators_manage(callback: CallbackQuery, state: FSMContext):
@@ -3271,8 +3323,6 @@ async def list_moderators(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(i18n.get('moderator_list', group_lang, list="Нет модераторов"), reply_markup=get_back_keyboard("moderators_manage"))
     await callback.answer()
 
-# ============ UNLINK GROUP HANDLERS ============
-
 @dp.callback_query(F.data == "unlink_group_confirm")
 async def unlink_group_confirm(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -3296,8 +3346,6 @@ async def unlink_group(callback: CallbackQuery, state: FSMContext):
     await callback.answer(i18n.get('group_unlinked', group_lang), show_alert=True)
     await state.clear()
     await cmd_start(callback.message, state)
-
-# ============ BASIC COMMANDS ============
 
 @dp.message(Command("puls"))
 async def cmd_ping(message: Message):
@@ -3340,7 +3388,7 @@ async def cmd_top(message: Message):
 @group_only()
 async def cmd_profile(message: Message):
     if not message.reply_to_message:
-        await message.reply("❌ Ответьте на сообщение пользователя!")
+        await message.reply(i18n.get('reply_to_user', get_group_language(message.chat.id)))
         return
     target = message.reply_to_message.from_user
     await message.reply(f"👤 <b>Профиль:</b> {safe_html(target.full_name, False)}\n🆔 ID: <code>{target.id}</code>", parse_mode="HTML")
@@ -3523,8 +3571,6 @@ async def cmd_warn(message: Message):
 async def cmd_mods(message: Message):
     await message.answer("👮 <b>Модераторы:</b> все администраторы группы", parse_mode="HTML")
 
-# ============ DELETE MESSAGES HANDLER ============
-
 @dp.message(F.text.regexp(r'^-смс\s+(\d+)$'))
 async def cmd_delete_messages(message: Message, state: FSMContext):
     chat_id = message.chat.id
@@ -3590,8 +3636,6 @@ async def cancel_delete(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
     await state.clear()
     await callback.answer("❌ Удаление отменено")
-
-# ============ GLOBAL COMMANDS ============
 
 @dp.message(Command("gban"))
 @check_bot_admin()
@@ -3807,8 +3851,6 @@ async def cmd_delmods(message: Message):
             continue
     await message.answer(text, parse_mode="HTML")
 
-# ============ GROUP EVENTS ============
-
 @dp.message(F.new_chat_members)
 async def on_bot_added(message: Message):
     bot_info = await bot.get_me()
@@ -4006,8 +4048,6 @@ async def help(callback: CallbackQuery):
     user_lang = get_user_language(callback.from_user.id)
     await callback.message.edit_text("🆘 <b>Помощь</b> ⭐\n\n🔹 <b>Команды в группе:</b>\n• /rules - правила\n• /stats - статистика\n• /top - топ\n• /profile - профиль\n• /group - управление\n• /puls - пинг\n• /mute - мут\n• /unmute - размут\n• /ban - бан\n• /unban - разбан\n• /kick - кик\n• /warn - варн\n• /mods - модераторы", reply_markup=get_main_keyboard(is_group=False, is_admin=callback.from_user.id in ADMIN_IDS, lang=user_lang))
     await callback.answer()
-
-# ============ ADMIN PANEL ============
 
 @dp.callback_query(F.data == "admin_panel")
 @check_bot_admin()
@@ -4337,8 +4377,6 @@ async def process_global_input(message: Message, state: FSMContext):
             await message.answer("❌ Некорректный ID пользователя!")
     await state.clear()
 
-# ============ BROADCAST HANDLERS ============
-
 @dp.callback_query(F.data == "admin_broadcast")
 @check_bot_admin()
 async def admin_broadcast(callback: CallbackQuery, state: FSMContext):
@@ -4462,8 +4500,6 @@ async def broadcast_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(i18n.get('broadcast_cancelled', 'ru'))
     await state.clear()
 
-# ============ ADMIN STATS, GROUPS, USERS, LOGS ============
-
 @dp.callback_query(F.data == "admin_stats")
 @check_bot_admin()
 async def admin_stats(callback: CallbackQuery):
@@ -4552,8 +4588,6 @@ async def admin_logs_clear(callback: CallbackQuery):
     await callback.answer("✅ Логи очищены!", show_alert=True)
     await admin_logs(callback)
 
-# ============ ADMIN BACKUP ============
-
 @dp.callback_query(F.data == "admin_backup")
 @check_bot_admin()
 async def admin_backup(callback: CallbackQuery):
@@ -4567,8 +4601,6 @@ async def admin_backup(callback: CallbackQuery):
         os.remove(backup_name)
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
-
-# ============ ADMIN CUSTOMIZATION ============
 
 @dp.callback_query(F.data == "admin_custom")
 @check_bot_admin()
@@ -4699,8 +4731,6 @@ async def admin_custom_reset_all(callback: CallbackQuery):
     await callback.answer(i18n.get('custom_reset_all', 'ru'), show_alert=True)
     await admin_custom(callback)
 
-# ============ ADMIN MAINTENANCE & SHUTDOWN ============
-
 @dp.callback_query(F.data == "admin_maintenance")
 @check_bot_admin()
 async def admin_maintenance(callback: CallbackQuery):
@@ -4721,8 +4751,6 @@ async def admin_shutdown(callback: CallbackQuery):
         return
     await callback.message.edit_text("🛑 Бот остановлен администратором")
     await callback.answer()
-
-# ============ AUTO RESPONSE HANDLER ============
 
 @dp.message(F.chat.type.in_({"group", "supergroup"}))
 async def handle_group_message(message: Message):
@@ -4748,18 +4776,83 @@ async def handle_group_message(message: Message):
             except:
                 pass
 
-# ============ MAIN ============
+@dp.callback_query(F.data.startswith("lift_"))
+async def lift_restriction(callback: CallbackQuery):
+    parts = callback.data.split('_')
+    action = parts[1]
+    target_id = int(parts[2])
+    original_message_id = int(parts[3])
+    moderator = callback.from_user
+    chat_id = callback.message.chat.id
+    try:
+        if action == 'mute':
+            await bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True, can_invite_users=True))
+            await callback.message.edit_text(f"✅ <b>Ограничение снято</b>\n\n👮 Модератор: {safe_html(moderator.full_name, False)}\n👤 Пользователь размучен", parse_mode="HTML")
+            await bot.send_message(chat_id, f"✅ Нарушения пользователя сняты модератором {safe_html(moderator.full_name, False)}", reply_to_message_id=original_message_id, parse_mode="HTML")
+        elif action == 'ban':
+            await bot.unban_chat_member(chat_id, target_id)
+            await callback.message.edit_text(f"✅ <b>Разбанен</b>\n\n👮 Модератор: {safe_html(moderator.full_name, False)}\n👤 Пользователь разбанен", parse_mode="HTML")
+            await bot.send_message(chat_id, f"✅ Бан пользователя снят модератором {safe_html(moderator.full_name, False)}", reply_to_message_id=original_message_id, parse_mode="HTML")
+        await callback.answer("✅ Ограничение снято!")
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+@dp.callback_query(F.data.startswith("confirm_"))
+async def confirm_action(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    action = data.get('action')
+    target_id = data.get('target_id')
+    target_name = data.get('target_name')
+    duration = data.get('duration')
+    reason = data.get('reason')
+    moderator = callback.from_user
+    message_id = data.get('message_id')
+    if callback.data.endswith('_yes'):
+        if action == 'mute':
+            try:
+                until = int(time.time() + duration) if duration > 0 else None
+                await bot.restrict_chat_member(callback.message.chat.id, target_id, permissions=ChatPermissions(can_send_messages=False), until_date=until)
+                duration_text = format_time(duration) if duration > 0 else "навсегда"
+                await bot.send_message(callback.message.chat.id, i18n.get('mute_message', get_group_language(callback.message.chat.id), name=safe_html(target_name, False), moderator=safe_html(moderator.full_name, False), duration=duration_text, reason=safe_html(reason, False)), reply_markup=get_lift_restriction_keyboard('mute', target_id, message_id, get_group_language(callback.message.chat.id)), parse_mode="HTML")
+            except Exception as e:
+                await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+        elif action == 'ban':
+            try:
+                until = int(time.time() + duration) if duration > 0 else None
+                await bot.ban_chat_member(callback.message.chat.id, target_id, until_date=until)
+                duration_text = format_time(duration) if duration > 0 else "навсегда"
+                await bot.send_message(callback.message.chat.id, i18n.get('ban_message', get_group_language(callback.message.chat.id), name=safe_html(target_name, False), moderator=safe_html(moderator.full_name, False), duration=duration_text, reason=safe_html(reason, False)), reply_markup=get_lift_restriction_keyboard('ban', target_id, message_id, get_group_language(callback.message.chat.id)), parse_mode="HTML")
+            except Exception as e:
+                await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+        elif action == 'kick':
+            try:
+                await bot.ban_chat_member(callback.message.chat.id, target_id)
+                await bot.unban_chat_member(callback.message.chat.id, target_id)
+                await bot.send_message(callback.message.chat.id, i18n.get('kick_message', get_group_language(callback.message.chat.id), name=safe_html(target_name, False), moderator=safe_html(moderator.full_name, False), reason=safe_html(reason, False)), parse_mode="HTML")
+            except Exception as e:
+                await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+        await callback.message.edit_text(i18n.get('action_completed', get_group_language(callback.message.chat.id)))
+    else:
+        await callback.message.edit_text(i18n.get('action_cancelled', get_group_language(callback.message.chat.id)))
+    await state.clear()
+    await callback.answer()
+
+@dp.callback_query(F.data == "add_to_group")
+async def add_to_group(callback: CallbackQuery):
+    await callback.answer("Добавьте бота в группу через поиск: @PulsOfficialManager_bot", show_alert=True)
+
+@dp.callback_query(F.data == "go_to_pm")
+async def go_to_pm(callback: CallbackQuery):
+    await callback.answer("Откройте личные сообщения с ботом: @PulsOfficialManager_bot", show_alert=True)
 
 async def main():
-    dp.message.middleware(AntiFlenterddleware())
+    dp.message.middleware(AntiFloodMiddleware())
     dp.message.middleware(MaintenanceMiddleware())
     dp.callback_query.middleware(MaintenanceMiddleware())
-    
     asyncio.create_task(rules_broadcast_task())
     asyncio.create_task(reset_periodic_counters())
     asyncio.create_task(clean_old_messages())
     asyncio.create_task(clean_expired_bans_mutes())
-    
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
