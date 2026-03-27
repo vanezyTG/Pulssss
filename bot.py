@@ -57,8 +57,8 @@ SPAM_WARN_LIMIT = 3
 
 SUPPORT_LINK = "https://t.me/support_puls"
 
-MAX_BUTTON_PRESSES = 3
-BUTTON_CHECK_TIME = 30
+MAX_BUTTON_PRESSES = 1
+BUTTON_CHECK_TIME = 3
 
 user_messages = defaultdict(list)
 user_button_presses = defaultdict(list)
@@ -73,6 +73,104 @@ maintenance_message = "🛠 Бот временно остановлен на т
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+
+# ============ ДЕКОРАТОРЫ ============
+
+def group_only():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(message: Message, *args, **kwargs):
+            if message.chat.type == 'private':
+                await message.answer("❌ Эта команда работает только в группах!")
+                return
+            return await func(message, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def pm_only():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(message: Message, *args, **kwargs):
+            if message.chat.type != 'private':
+                await message.answer("❌ Эта команда работает только в личных сообщениях!")
+                return
+            return await func(message, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def check_bot_admin():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(message: Message, *args, **kwargs):
+            if message.from_user.id not in ADMIN_IDS:
+                await message.answer("❌ Эта команда доступна только администраторам бота!")
+                return
+            return await func(message, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def check_owner():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(callback: CallbackQuery, *args, **kwargs):
+            user_id = callback.from_user.id
+            state: FSMContext = kwargs.get('state')
+            if state:
+                data = await state.get_data()
+                msg_owner = data.get(f"msg_owner_{callback.message.message_id}")
+                if msg_owner and msg_owner != user_id:
+                    await callback.answer("⚠️ Эта кнопка только для того, кто вызвал команду!", show_alert=True)
+                    return
+            return await func(callback, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def check_public():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(callback: CallbackQuery, *args, **kwargs):
+            return await func(callback, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def edit_only():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(callback: CallbackQuery, *args, **kwargs):
+            return await func(callback, *args, **kwargs)
+        return wrapper
+    return decorator
+
+def action_with_flood():
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(callback: CallbackQuery, *args, **kwargs):
+            user_id = callback.from_user.id
+            button_data = callback.data
+            now = time.time()
+            key = f"{user_id}_{button_data}"
+            
+            user_button_presses[key] = [t for t in user_button_presses[key] if now - t < BUTTON_CHECK_TIME]
+            
+            if len(user_button_presses[key]) >= MAX_BUTTON_PRESSES:
+                oldest = user_button_presses[key][0] if user_button_presses[key] else now
+                wait_time = int(BUTTON_CHECK_TIME - (now - oldest))
+                await callback.answer(f"⚠️ Подожди {wait_time} сек.", show_alert=True)
+                return
+            
+            user_button_presses[key].append(now)
+            
+            if callback.message.chat.type in ['group', 'supergroup']:
+                try:
+                    await bot.send_message(callback.message.chat.id, f"👤 {callback.from_user.full_name} использовал функцию", disable_notification=True)
+                except:
+                    pass
+            
+            return await func(callback, *args, **kwargs)
+        return wrapper
+    return decorator
+
+# ============ I18N ============
 
 class I18n:
     def __init__(self):
@@ -391,6 +489,8 @@ class I18n:
 
 i18n = I18n()
 
+# ============ КЛАССЫ ДЛЯ КАСТОМИЗАЦИИ ============
+
 class MessageTemplate:
     def __init__(self, key: str, default_text: str, default_photo: str = None):
         self.key = key
@@ -464,6 +564,8 @@ class MessageCustomization:
         return None
 
 customization = MessageCustomization()
+
+# ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
 
 def safe_html(text: str, preserve_quotes: bool = True) -> str:
     if not text:
@@ -887,6 +989,8 @@ def get_admin_global_mutes_keyboard(lang: str = "ru"):
     builder.adjust(1)
     return builder.as_markup()
 
+# ============ ВСПОМОГАТЕЛЬНЫЕ АСИНХРОННЫЕ ФУНКЦИИ ============
+
 async def is_creator(chat_id, user_id):
     try:
         member = await bot.get_chat_member(chat_id, user_id)
@@ -900,6 +1004,13 @@ async def is_admin(chat_id, user_id):
         return member.status in ['creator', 'administrator']
     except:
         return False
+
+async def check_moderator_permission(chat_id, user_id, permission):
+    if await is_creator(chat_id, user_id):
+        return True
+    return False
+
+# ============ БАЗА ДАННЫХ ============
 
 class Database:
     def __init__(self, db_path="puls_manager.db"):
@@ -979,6 +1090,7 @@ class Database:
             c.execute('CREATE INDEX IF NOT EXISTS idx_user_stats_chat ON user_stats(chat_id)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_user_stats_user ON user_stats(user_id)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_violations_time ON violation_logs(timestamp)')
+            
             c.execute('SELECT user_id, reason, added_at, unbanned_in, warnings FROM global_spammers')
             for row in c.fetchall():
                 user_id = row[0]
@@ -987,6 +1099,7 @@ class Database:
                 unbanned_in = set(json.loads(row[3])) if row[3] else set()
                 warnings = row[4] or 1
                 global_spammers[user_id] = {"причина": reason, "когда_добавлен": added_at, "разбанен_в": unbanned_in, "предупреждения": warnings}
+            
             c.execute('SELECT msg_key, custom_text, custom_photo FROM custom_messages')
             for row in c.fetchall():
                 key = row[0]
@@ -1465,6 +1578,8 @@ class Database:
 
 db = Database()
 
+# ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ ============
+
 async def send_to_log_group(source_chat_id, event_type, data):
     log_group_info = db.get_source_chat_log_group(source_chat_id)
     if not log_group_info:
@@ -1629,6 +1744,8 @@ async def apply_global_mute(user_id, reason, duration=0):
             except:
                 pass
 
+# ============ FSM СОСТОЯНИЯ ============
+
 class RulesStates(StatesGroup):
     waiting_for_rules_text = State()
     waiting_for_interval = State()
@@ -1671,6 +1788,8 @@ class AdminBroadcastStates(StatesGroup):
 class CustomMessageStates(StatesGroup):
     waiting_for_new_text = State()
     waiting_for_new_photo = State()
+
+# ============ MIDDLEWARE ============
 
 flood_control = defaultdict(lambda: deque(maxlen=50))
 
@@ -1762,6 +1881,8 @@ class MaintenanceMiddleware(BaseMiddleware):
                 return
         return await handler(event, data)
 
+# ============ ФОНОВЫЕ ЗАДАЧИ ============
+
 async def reset_periodic_counters():
     while True:
         now = datetime.now()
@@ -1829,6 +1950,8 @@ DEFAULT_RULES = """
 🔹 2.2. Оскорбления — мут 3–7 дней
 🔹 2.3. Спам, флуд — мут 1–3 дня</blockquote>
 """
+
+# ============ ХЕНДЛЕРЫ КОМАНД ============
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
