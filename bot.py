@@ -742,6 +742,22 @@ class AntiFloodMiddleware(BaseMiddleware):
         except Exception as e:
             logger.error(f"Ошибка наказания: {e}")
 
+class MaintenanceMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        global technical_maintenance
+        if isinstance(event, (Message, CallbackQuery)):
+            user_id = event.from_user.id
+            if user_id in ADMIN_IDS:
+                return await handler(event, data)
+        if technical_maintenance:
+            if isinstance(event, Message):
+                await event.reply(maintenance_message)
+                return
+            if isinstance(event, CallbackQuery):
+                await event.answer("🛠 Бот на техработах", show_alert=True)
+                return
+        return await handler(event, data)
+
 def parse_time(time_str: str) -> int:
     if not time_str or time_str == '0' or time_str.lower() == 'навсегда':
         return 0
