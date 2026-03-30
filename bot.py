@@ -4915,6 +4915,46 @@ async def add_to_group(callback: CallbackQuery):
     await callback.answer()
     await callback.message.answer(f"➕ Добавьте бота в группу: https://t.me/{BOT_USERNAME}?startgroup=start")
 
+async def clean_old_messages():
+    """Очистка старых сообщений из памяти"""
+    while True:
+        await asyncio.sleep(300)  # Каждые 5 минут
+        now = time.time()
+        # Очистка user_messages
+        for user_id in list(user_messages.keys()):
+            user_messages[user_id] = [t for t in user_messages[user_id] if now - t < 300]
+            if not user_messages[user_id]:
+                del user_messages[user_id]
+        # Очистка user_button_presses
+        for key in list(user_button_presses.keys()):
+            user_button_presses[key] = [t for t in user_button_presses[key] if now - t < 300]
+            if not user_button_presses[key]:
+                del user_button_presses[key]
+        # Очистка user_commands
+        for user_id in list(user_commands.keys()):
+            user_commands[user_id] = [t for t in user_commands[user_id] if now - t < 300]
+            if not user_commands[user_id]:
+                del user_commands[user_id]
+        # Очистка raid_detector
+        for chat_id in list(raid_detector.keys()):
+            raid_detector[chat_id] = [t for t in raid_detector[chat_id] if now - t < 300]
+            if not raid_detector[chat_id]:
+                del raid_detector[chat_id]
+
+async def clean_old_logs():
+    """Очистка старых логов из базы данных"""
+    while True:
+        await asyncio.sleep(86400)  # Каждые 24 часа
+        old_time = int(time.time()) - 30 * 86400  # 30 дней
+        try:
+            with db.get_connection() as conn:
+                conn.execute('DELETE FROM violation_logs WHERE timestamp < ?', (old_time,))
+                conn.execute('DELETE FROM moderator_logs WHERE timestamp < ?', (old_time,))
+                conn.commit()
+                logger.info("Старые логи очищены")
+        except Exception as e:
+            logger.error(f"Ошибка очистки логов: {e}")
+
 async def main():
     dp.message.middleware(CommandFloodMiddleware())
     dp.message.middleware(AntiFloodMiddleware())
