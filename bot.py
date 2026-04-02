@@ -946,11 +946,12 @@ class Database:
     
     def update_message_count(self, chat_id, user_id):
         with self.get_connection() as conn:
-            conn.execute('UPDATE user_stats SET all_messages = all_messages + 1, month_messages = month_messages + 1, week_messages = week_messages + 1, day_messages = day_messages + 1, last_active = ? WHERE chat_id = ? AND user_id = ?',
-                        (int(time.time()), chat_id, user_id))
-            if conn.rowcount == 0:
-                conn.execute('INSERT INTO user_stats (chat_id, user_id, join_date, all_messages, month_messages, week_messages, day_messages, last_active, left_chat) VALUES (?, ?, ?, 1, 1, 1, 1, ?, 0)',
-                            (chat_id, user_id, int(time.time()), int(time.time())))
+            cursor = conn.cursor()
+            cursor.execute('UPDATE user_stats SET all_messages = all_messages + 1, month_messages = month_messages + 1, week_messages = week_messages + 1, day_messages = day_messages + 1, last_active = ? WHERE chat_id = ? AND user_id = ?',
+                          (int(time.time()), chat_id, user_id))
+            if cursor.rowcount == 0:
+                cursor.execute('INSERT INTO user_stats (chat_id, user_id, join_date, all_messages, month_messages, week_messages, day_messages, last_active, left_chat) VALUES (?, ?, ?, 1, 1, 1, 1, ?, 0)',
+                              (chat_id, user_id, int(time.time()), int(time.time())))
             conn.commit()
     
     def set_left_chat(self, chat_id, user_id):
