@@ -1554,7 +1554,7 @@ def get_log_settings_keyboard(settings):
     builder.add(create_button(f"{msg} Сообщения", "toggle_log_messages"))
     builder.add(create_button("◀ Назад", "log_group_manage"))
     builder.adjust(2)
-    return builder.as-markup()
+    return builder.as_markup()
 
 def get_moderators_manage_keyboard(moderators):
     builder = InlineKeyboardBuilder()
