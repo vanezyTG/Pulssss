@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 import time
@@ -44,8 +43,8 @@ def excepthook(exctype, value, tb):
 
 sys.excepthook = excepthook
 
-BOT_TOKEN = "8557190026:AAEWJo-DqwgAeLyz94xbH7lXe9snUZQk30Y"
-BOT_USERNAME = "PulsOfficialManager_bot"
+BOT_TOKEN = "8715885817:AAEsRx1zMo72B1xPYb2C8T4W-nb-o01QfDI"
+BOT_USERNAME = "PulsChatManagerBot"
 ADMIN_IDS = [6708209142]
 
 MAX_TRIGGERS = 100
@@ -54,17 +53,17 @@ MAX_TRIGGER_WORDS = 1
 MAX_RESPONSE_LENGTH = 4000
 MAX_RULES_LENGTH = 10000
 MAX_WELCOME_LENGTH = 4000
-MAX_AUTO_COMMENT_LENGTH = 4000
+MAX_AUTO_COMMENT_LENGTH = 2000
 
 SPAM_MESSAGE_LIMIT = 30
-SPAM_CHECK_TIME = 30
+SPAM_CHECK_TIME = 20
 SPAM_WARN_LIMIT = 3
 
 SUPPORT_LINK = "https://t.me/support_puls"
 
-MAX_BUTTON_PRESSES = 4
-BUTTON_CHECK_TIME = 3
-BUTTON_BLOCK_TIME = 8
+MAX_BUTTON_PRESSES = 2
+BUTTON_CHECK_TIME = 2
+BUTTON_BLOCK_TIME = 5
 
 MAX_COMMANDS = 3
 COMMAND_CHECK_TIME = 2
@@ -145,36 +144,50 @@ class MessageCustomization:
         self.init_defaults()
     
     def init_defaults(self):
-        self.templates['welcome_pm'] = MessageTemplate('welcome_pm', "👋 Добро пожаловать в Puls Chat Manager!\n\nВыберите раздел в меню ниже 👇")
-        self.templates['welcome_group'] = MessageTemplate('welcome_group', "👋 Puls Chat Manager\n\n/rules - Правила\n/stats - Моя статистика\n/top - Топ активных\n/profile - Профиль пользователя\n/group - Управление группой\n/puls - Проверка пинга\n/mute [время] [причина] - замутить\n/unmute - размутить\n/ban [время] [причина] - забанить\n/unban - разбанить\n/kick [причина] - кикнуть\n/warn [причина] - предупредить\n/mods - список модераторов")
-        self.templates['profile_header'] = MessageTemplate('profile_header', "Профиль {premium_emoji} {name}")
+        self.templates['welcome_pm'] = MessageTemplate('welcome_pm', "👋 Добро пожаловать в Puls Chat Manager!\n\nВыберите раздел в меню 👇")
+        self.templates['welcome_group'] = MessageTemplate('welcome_group', "👋 Puls Chat Manager\n\n/rules - Правила\n/stats - Статистика\n/top - Топ\n/group - Управление")
+        self.templates['profile_header'] = MessageTemplate('profile_header', "<b>Профиль {premium_emoji} {name}</b>")
         self.templates['profile_id'] = MessageTemplate('profile_id', "🆔 ID: <code>{global_id}</code>")
-        self.templates['profile_first_seen'] = MessageTemplate('profile_first_seen', "📅 Впервые замечен: {first_seen}")
+        self.templates['profile_first_seen'] = MessageTemplate('profile_first_seen', "📅 Впервые: {first_seen}")
         self.templates['profile_premium'] = MessageTemplate('profile_premium', "⭐ Премиум пользователь")
-        self.templates['profile_antispam'] = MessageTemplate('profile_antispam', "🛡️ Антиспам база Puls: {warnings}/{limit} предупреждений")
-        self.templates['profile_stats_header'] = MessageTemplate('profile_stats_header', "📊 Статистика в этом чате:")
-        self.templates['profile_day'] = MessageTemplate('profile_day', "• За день: {count} 💬")
-        self.templates['profile_week'] = MessageTemplate('profile_week', "• За неделю: {count} 💬")
-        self.templates['profile_month'] = MessageTemplate('profile_month', "• За месяц: {count} 💬")
-        self.templates['profile_total'] = MessageTemplate('profile_total', "• Всего: {count} 💬")
-        self.templates['profile_position'] = MessageTemplate('profile_position', "• Место в топе: {position}")
-        self.templates['profile_no_stats'] = MessageTemplate('profile_no_stats', "📊 У пользователя пока нет сообщений в этом чате")
-        self.templates['top_header'] = MessageTemplate('top_header', "🏆 Топ активных (всего сообщений):")
+        self.templates['profile_antispam'] = MessageTemplate('profile_antispam', "🛡️ Антиспам: {warnings}/{limit}")
+        self.templates['profile_stats_header'] = MessageTemplate('profile_stats_header', "📊 Статистика:")
+        self.templates['profile_day'] = MessageTemplate('profile_day', "• За день: {count}")
+        self.templates['profile_week'] = MessageTemplate('profile_week', "• За неделю: {count}")
+        self.templates['profile_month'] = MessageTemplate('profile_month', "• За месяц: {count}")
+        self.templates['profile_total'] = MessageTemplate('profile_total', "• Всего: {count}")
+        self.templates['profile_position'] = MessageTemplate('profile_position', "• Место: {position}")
+        self.templates['profile_no_stats'] = MessageTemplate('profile_no_stats', "📊 Нет сообщений")
+        self.templates['top_header'] = MessageTemplate('top_header', "🏆 Топ активных:")
         self.templates['top_entry'] = MessageTemplate('top_entry', "{medal} {premium_emoji} {name} — {count} 💬{warnings}")
-        self.templates['welcome_simple'] = MessageTemplate('welcome_simple', "Добро пожаловать, {premium_emoji} {name}!\n\n🆔 ID: <code>{global_id}</code>\n📅 Впервые замечен: {first_seen}\n{premium_line}🛡️ Антиспам база Puls: {warnings}/{limit} предупреждений\n\n• Username: @{username}\n• Telegram ID: <code>{user_id}</code>\n• Вошёл: {join_dt}\n• Место в топе: {position}")
-        self.templates['group_linked'] = MessageTemplate('group_linked', "✅ Группа успешно привязана!\n\nНазвание: {title}\nID: <code>{chat_id}</code>\n\nТеперь вы можете настроить её в личных сообщениях с ботом.\nНажмите /start в ЛС, чтобы открыть главное меню.")
-        self.templates['group_linked_pm'] = MessageTemplate('group_linked_pm', "✅ Группа {title} успешно привязана!\n\nТеперь она доступна в разделе «Настройки групп» в главном меню.")
-        self.templates['group_unlinked'] = MessageTemplate('group_unlinked', "✅ Группа отвязана от вашего аккаунта.")
-        self.templates['trigger_added'] = MessageTemplate('trigger_added', "✅ Триггер '{trigger}' добавлен ({count}/{max})")
-        self.templates['trigger_exists'] = MessageTemplate('trigger_exists', "❌ Триггер '{trigger}' уже существует")
-        self.templates['trigger_limit'] = MessageTemplate('trigger_limit', "❌ Достигнут лимит триггеров ({max})")
+        self.templates['welcome_simple'] = MessageTemplate('welcome_simple', "Добро пожаловать, {premium_emoji} {name}!\n\n🆔 ID: {global_id}\n📅 Впервые: {first_seen}\n{premium_line}🛡️ Антиспам: {warnings}/{limit}\n\n• Username: @{username}\n• Telegram ID: {user_id}\n• Вошёл: {join_dt}\n• Место: {position}")
+        self.templates['mute_message'] = MessageTemplate('mute_message', "🔇 {name} замьючен\n\n👮 {moderator}\n⏱ {duration}\n📝 {reason}")
+        self.templates['ban_message'] = MessageTemplate('ban_message', "⛔ {name} забанен\n\n👮 {moderator}\n⏱ {duration}\n📝 {reason}")
+        self.templates['kick_message'] = MessageTemplate('kick_message', "👢 {name} кикнут\n\n👮 {moderator}\n📝 {reason}")
+        self.templates['warn_message'] = MessageTemplate('warn_message', "⚠️ {name} предупреждение {warn_count}/{max_warns}\n\n👮 {moderator}\n📝 {reason}")
+        self.templates['unmute_message'] = MessageTemplate('unmute_message', "🔊 {name} размучен\n\n👮 {moderator}")
+        self.templates['lift_restriction_message'] = MessageTemplate('lift_restriction_message', "🔓 Ограничение снято\n\n👮 {moderator}")
+        self.templates['spammer_detected'] = MessageTemplate('spammer_detected', "🚫 Спамер {user_link}\nПричина: {reason}\nПредупреждений: {warnings}/{limit}")
+        self.templates['spammer_pm'] = MessageTemplate('spammer_pm', "🚫 Вы забанены в {chat_title}\nПричина: антиспам база\nПредупреждений: {warnings}/{limit}\nПоддержка: {support_link}")
+        self.templates['spam_warning_1'] = MessageTemplate('spam_warning_1', "⚠️ Подозрительная активность\n{count} сообщений за минуту\nПредупреждение {current}/{limit}")
+        self.templates['spam_warning_2'] = MessageTemplate('spam_warning_2', "⚠️ Подозрительная активность\n{count} сообщений за минуту\nПредупреждение {current}/{limit}")
+        self.templates['spam_warning_3'] = MessageTemplate('spam_warning_3', "⚠️ Достигнут лимит!\nВы добавлены в антиспам базу\nПоддержка: {support_link}")
+        self.templates['group_linked'] = MessageTemplate('group_linked', "✅ Группа {title} привязана!\nID: {chat_id}")
+        self.templates['group_linked_pm'] = MessageTemplate('group_linked_pm', "✅ Группа {title} привязана!")
+        self.templates['group_unlinked'] = MessageTemplate('group_unlinked', "✅ Группа отвязана")
+        self.templates['confirm_action'] = MessageTemplate('confirm_action', "⚠️ Подтвердите действие\n\n{action} {name}\n{duration_line}Причина: {reason}")
+        self.templates['action_cancelled'] = MessageTemplate('action_cancelled', "❌ Отменено")
+        self.templates['action_completed'] = MessageTemplate('action_completed', "✅ Выполнено")
+        self.templates['trigger_added'] = MessageTemplate('trigger_added', "✅ Триггер {trigger} добавлен ({count}/{max})")
+        self.templates['trigger_exists'] = MessageTemplate('trigger_exists', "❌ Триггер {trigger} уже существует")
+        self.templates['trigger_limit'] = MessageTemplate('trigger_limit', "❌ Лимит триггеров {max}")
         self.templates['trigger_empty'] = MessageTemplate('trigger_empty', "❌ Триггер не может быть пустым")
-        self.templates['trigger_too_long'] = MessageTemplate('trigger_too_long', "❌ Триггер слишком длинный! Максимум {max_len} символов")
-        self.templates['trigger_too_many_words'] = MessageTemplate('trigger_too_many_words', "❌ Триггер должен содержать максимум {max_words} слово")
-        self.templates['trigger_removed'] = MessageTemplate('trigger_removed', "✅ Триггер '{trigger}' удалён!")
-        self.templates['spammer_detected'] = MessageTemplate('spammer_detected', "🚫 Обнаружен спамер в базе Пульса!\n\nПользователь: {user_link}\nПричина: {reason}\nПредупреждений: {warnings}/{limit}\n\nАдмины могут разблокировать в этом чате командой:\n<code>/unban {user_id}</code>")
-        self.templates['spammer_pm'] = MessageTemplate('spammer_pm', "🚫 Вы были забанены в группе {chat_title}\n\nПричина: вы находитесь в антиспам базе Пульса.\nПредупреждений: {warnings}/{limit}\n\nДля выхода из антиспам базы обратитесь к разработчикам:\n{support_link}")
-        self.templates['raid_detected'] = MessageTemplate('raid_detected', "⚠️ Обнаружена рейд-атака!\n\nЗа {window} сек вступило {count} новых участников.\nАвтоматически забанены новые участники на {duration}.")
+        self.templates['trigger_too_long'] = MessageTemplate('trigger_too_long', "❌ Максимум {max_len} символов")
+        self.templates['trigger_too_many_words'] = MessageTemplate('trigger_too_many_words', "❌ Максимум {max_words} слово")
+        self.templates['trigger_removed'] = MessageTemplate('trigger_removed', "✅ Триггер {trigger} удалён")
+        self.templates['profanity_detected'] = MessageTemplate('profanity_detected', "🚫 Обнаружен мат\nПользователь: {user_link}\nНаказание: {punishment}")
+        self.templates['raid_detected'] = MessageTemplate('raid_detected', "⚠️ Рейд-атака!\n{count} вступлений за {window} сек\nНовые участники забанены на {duration}")
+        self.templates['auto_comment_added'] = MessageTemplate('auto_comment_added', "✅ Авто-комментарий настроен!\nТекст: {text}\nМедиа: {'есть' if media else 'нет'}")
     
     def get_template(self, key: str) -> MessageTemplate:
         return self.templates.get(key)
@@ -201,22 +214,33 @@ def safe_html(text: str, preserve_tags: bool = True) -> str:
         return ""
     if not preserve_tags:
         return html.escape(text)
+
     allowed_tags = ['b', 'i', 'u', 's', 'code', 'pre', 'tg-spoiler', 'a', 'strong', 'em', 'ins', 'strike', 'del']
     placeholders = {}
+
+    # Специальная обработка для expandable blockquote
     text = re.sub(r'<blockquote expandable>', '!!BLOCKQUOTE_EXPANDABLE_OPEN!!', text, flags=re.IGNORECASE)
     text = re.sub(r'</blockquote>', '!!BLOCKQUOTE_CLOSE!!', text, flags=re.IGNORECASE)
+
     for i, tag in enumerate(allowed_tags):
         pattern_open = f'<{tag}>'
         pattern_close = f'</{tag}>'
         placeholder_open = f'!!TAG_{i}_OPEN!!'
         placeholder_close = f'!!TAG_{i}_CLOSE!!'
+
         text = re.sub(pattern_open, lambda m: (placeholders.setdefault(placeholder_open, f'<{tag}>') or placeholder_open), text, flags=re.IGNORECASE)
         text = re.sub(pattern_close, lambda m: (placeholders.setdefault(placeholder_close, f'</{tag}>') or placeholder_close), text, flags=re.IGNORECASE)
+
     text = html.escape(text)
+
+    # Восстанавливаем теги
     for ph, tag_html in placeholders.items():
         text = text.replace(ph, tag_html)
+
+    # Восстанавливаем expandable blockquote
     text = text.replace('!!BLOCKQUOTE_EXPANDABLE_OPEN!!', '<blockquote expandable>')
     text = text.replace('!!BLOCKQUOTE_CLOSE!!', '</blockquote>')
+
     return text
 
 def check_owner():
@@ -229,7 +253,7 @@ def check_owner():
                 data = await state.get_data()
                 msg_owner = data.get(f"msg_owner_{callback.message.message_id}")
                 if msg_owner and msg_owner != user_id:
-                    await callback.answer("⚠️ Эта кнопка только для того, кто вызвал команду!", show_alert=True)
+                    await callback.answer("⚠️ Эта кнопка только для вас!", show_alert=True)
                     return
             return await func(callback, *args, **kwargs)
         return wrapper
@@ -251,7 +275,7 @@ def check_bot_admin():
         @wraps(func)
         async def wrapper(message: Message, *args, **kwargs):
             if message.from_user.id not in ADMIN_IDS:
-                await message.answer("❌ Эта команда доступна только администраторам бота!")
+                await message.answer("❌ Доступ запрещён!")
                 return
             return await func(message, *args, **kwargs)
         return wrapper
@@ -262,7 +286,7 @@ def group_only():
         @wraps(func)
         async def wrapper(message: Message, *args, **kwargs):
             if message.chat.type == 'private':
-                await message.answer("❌ Эта команда работает только в группах!")
+                await message.answer("❌ Только в группах!")
                 return
             return await func(message, *args, **kwargs)
         return wrapper
@@ -273,7 +297,7 @@ def pm_only():
         @wraps(func)
         async def wrapper(message: Message, *args, **kwargs):
             if message.chat.type != 'private':
-                await message.answer("❌ Эта команда работает только в личных сообщениях!")
+                await message.answer("❌ Только в ЛС!")
                 return
             return await func(message, *args, **kwargs)
         return wrapper
@@ -294,13 +318,13 @@ def action_with_flood():
             user_id = callback.from_user.id
             now = time.time()
             if now < button_blocked_users.get(user_id, 0):
-                await callback.answer("⚠️ Подождите немного!", show_alert=True)
+                await callback.answer("⚠️ Подождите!", show_alert=True)
                 return
             key = f"{user_id}_{callback.data}"
             user_button_presses[key] = [t for t in user_button_presses[key] if now - t < BUTTON_CHECK_TIME]
             if len(user_button_presses[key]) >= MAX_BUTTON_PRESSES:
                 button_blocked_users[user_id] = now + BUTTON_BLOCK_TIME
-                await callback.answer(f"⚠️ Слишком частые нажатия! Блокировка на {BUTTON_BLOCK_TIME} сек.", show_alert=True)
+                await callback.answer(f"⚠️ Блокировка {BUTTON_BLOCK_TIME} сек!", show_alert=True)
                 return
             user_button_presses[key].append(now)
             return await func(callback, *args, **kwargs)
@@ -343,7 +367,7 @@ class AntiFloodMiddleware(BaseMiddleware):
             is_spammer, reason, _ = check_spammer(user.id, chat_id)
             if is_spammer:
                 await event.delete()
-                await event.answer(customization.format_message('spammer_detected', user_link=f"<a href='tg://user?id={user.id}'>{user.full_name}</a>", reason=reason, warnings=0, limit=SPAM_WARN_LIMIT, user_id=user.id))
+                await event.answer(customization.format_message('spammer_detected', user_link=user.full_name, reason=reason, warnings=0, limit=SPAM_WARN_LIMIT))
                 try:
                     await bot.ban_chat_member(chat_id, user.id)
                 except:
@@ -373,10 +397,10 @@ class AntiFloodMiddleware(BaseMiddleware):
             return
         text = event.text or event.caption or ""
         if db.get_links_filter_settings(chat_id)['enabled'] and check_links(text):
-            await self.handle_violation(event, chat_id, user, settings, "Отправка ссылок")
+            await self.handle_violation(event, chat_id, user, settings, "Ссылки")
             return
         if db.get_profanity_filter_settings(chat_id)['enabled'] and check_profanity(text):
-            await self.handle_violation(event, chat_id, user, settings, "Использование нецензурной лексики")
+            await self.handle_violation(event, chat_id, user, settings, "Мат")
             return
         user_messages[key].append((now, msg_type))
         return await handler(event, data)
@@ -385,7 +409,7 @@ class AntiFloodMiddleware(BaseMiddleware):
         warns = db.get_user_warns(chat_id, user.id)
         if warns['count'] < settings['warn_count']:
             new_count = db.add_user_warn(chat_id, user.id)
-            await event.reply(f"⚠️ {user.full_name}, не флудите! Предупреждение {new_count}/{settings['warn_count']}")
+            await event.reply(f"⚠️ {user.full_name}, предупреждение {new_count}/{settings['warn_count']}")
             await send_to_log_group(chat_id, 'violation', f"⚠️ {user.full_name} получил предупреждение ({new_count}/{settings['warn_count']}): {reason}")
             return
         punish = settings['punish_after_warn'] if warns['count'] >= settings['warn_count'] else (settings['first_punish'] if warns['count'] == 0 else settings['repeat_punish'])
@@ -395,35 +419,21 @@ class AntiFloodMiddleware(BaseMiddleware):
     
     async def apply_punishment(self, event, chat_id, user, punish, duration, reason):
         try:
-            message_link = get_message_link(chat_id, event.message_id)
-            user_link = f"<a href='tg://user?id={user.id}'>{user.full_name}</a>"
-            mod_link = f"<a href='tg://user?id={event.from_user.id}'>{event.from_user.full_name}</a>"
-            duration_text = format_time(duration) if duration > 0 else "навсегда"
-            
             if punish == 'mute':
                 until = int(time.time() + duration) if duration > 0 else None
                 await bot.restrict_chat_member(chat_id, user.id, permissions=ChatPermissions(can_send_messages=False), until_date=until)
-                
-                mute_text = f"🔇 Мут\n\n👤 Нарушитель: {user_link}\n📝 Причина: {reason}\n⏱ Длительность: {duration_text}\n👮 Модератор: {mod_link}\n\n🔗 <a href='{message_link}'>Перейти к сообщению</a>"
-                await event.reply(mute_text, reply_markup=get_lift_restriction_keyboard('mute', user.id, event.message_id))
-                await send_to_log_group(chat_id, 'mod_action', mute_text)
-                
+                await event.reply(customization.format_message('mute_message', name=user.full_name, moderator=event.from_user.full_name, duration=format_time(duration), reason=reason))
+                await send_to_log_group(chat_id, 'mod_action', f"🔇 Мут {user.full_name}: {reason} на {format_time(duration)}")
             elif punish == 'ban':
                 until = int(time.time() + duration) if duration > 0 else None
                 await bot.ban_chat_member(chat_id, user.id, until_date=until)
-                
-                ban_text = f"⛔ Бан\n\n👤 Нарушитель: {user_link}\n📝 Причина: {reason}\n⏱ Длительность: {duration_text}\n👮 Модератор: {mod_link}\n\n🔗 <a href='{message_link}'>Перейти к сообщению</a>"
-                await event.reply(ban_text, reply_markup=get_lift_restriction_keyboard('ban', user.id, event.message_id))
-                await send_to_log_group(chat_id, 'mod_action', ban_text)
-                
+                await event.reply(customization.format_message('ban_message', name=user.full_name, moderator=event.from_user.full_name, duration=format_time(duration), reason=reason))
+                await send_to_log_group(chat_id, 'mod_action', f"⛔ Бан {user.full_name}: {reason} на {format_time(duration)}")
             elif punish == 'kick':
                 await bot.ban_chat_member(chat_id, user.id)
                 await bot.unban_chat_member(chat_id, user.id)
-                
-                kick_text = f"👢 Кик\n\n👤 Нарушитель: {user_link}\n📝 Причина: {reason}\n👮 Модератор: {mod_link}\n\n🔗 <a href='{message_link}'>Перейти к сообщению</a>"
-                await event.reply(kick_text)
-                await send_to_log_group(chat_id, 'mod_action', kick_text)
-                
+                await event.reply(customization.format_message('kick_message', name=user.full_name, moderator=event.from_user.full_name, reason=reason))
+                await send_to_log_group(chat_id, 'mod_action', f"👢 Кик {user.full_name}: {reason}")
         except Exception as e:
             logger.error(f"Ошибка наказания: {e}")
 
@@ -438,7 +448,7 @@ class MaintenanceMiddleware(BaseMiddleware):
                 await event.reply(maintenance_message)
                 return
             if isinstance(event, CallbackQuery):
-                await event.answer("🛠 Бот временно остановлен на технические работы", show_alert=True)
+                await event.answer("🛠 Бот на техработах", show_alert=True)
                 return
         return await handler(event, data)
 
@@ -462,10 +472,10 @@ def format_time(seconds: int) -> str:
     hours = (seconds % 86400) // 3600
     mins = (seconds % 3600) // 60
     parts = []
-    if days: parts.append(f"{days} дн")
-    if hours: parts.append(f"{hours} ч")
-    if mins: parts.append(f"{mins} мин")
-    return " ".join(parts) if parts else "0 мин"
+    if days: parts.append(f"{days}д")
+    if hours: parts.append(f"{hours}ч")
+    if mins: parts.append(f"{mins}м")
+    return " ".join(parts) or "0м"
 
 def generate_user_id() -> str:
     return ''.join(random.choices(string.digits, k=9))
@@ -538,28 +548,6 @@ async def cleanup_old_data():
             raid_detector[cid] = [t for t in raid_detector[cid] if now - t < DATA_TTL]
             if not raid_detector[cid]:
                 del raid_detector[cid]
-
-async def clean_old_messages():
-    while True:
-        await asyncio.sleep(300)
-        now = time.time()
-        for user_id in list(user_messages.keys()):
-            user_messages[user_id] = [t for t in user_messages[user_id] if now - t[0] < SPAM_CHECK_TIME * 2]
-            if not user_messages[user_id]:
-                del user_messages[user_id]
-        for key in list(user_button_presses.keys()):
-            user_button_presses[key] = [t for t in user_button_presses[key] if now - t < BUTTON_CHECK_TIME * 10]
-            if not user_button_presses[key]:
-                del user_button_presses[key]
-
-async def clean_old_logs():
-    while True:
-        await asyncio.sleep(86400)
-        old_time = int(time.time()) - 30 * 86400
-        with db.get_connection() as conn:
-            conn.execute('DELETE FROM violation_logs WHERE timestamp < ?', (old_time,))
-            conn.execute('DELETE FROM moderator_logs WHERE timestamp < ?', (old_time,))
-            conn.commit()
 
 def check_spammer(user_id: int, chat_id: int = None) -> Tuple[bool, Optional[str], int]:
     with spam_lock:
@@ -1258,7 +1246,7 @@ async def check_moderator_permission(chat_id, user_id, permission):
     return perms.get(permission, False)
 
 def format_datetime(ts):
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
 
 def format_interval(seconds):
     if seconds < 60:
@@ -1280,7 +1268,7 @@ async def rules_broadcast_task():
                     if last and last[0] and int(time.time()) - last[0] < interval:
                         continue
                     try:
-                        msg = await bot.send_message(chat_id, f"📢 Напоминание правил\n\n{rules_html}", parse_mode="HTML")
+                        msg = await bot.send_message(chat_id, f"📢 Напоминание правил\n\n{safe_html(rules_html, True)}", parse_mode="HTML")
                         try:
                             await bot.pin_chat_message(chat_id, msg.message_id)
                         except:
@@ -1322,7 +1310,29 @@ async def notify_all_groups(text):
             except:
                 pass
 
-# ==================== КЛАВИАТУРЫ ====================
+async def clean_old_messages():
+    while True:
+        await asyncio.sleep(300)
+        now = time.time()
+        for user_id in list(user_messages.keys()):
+            user_messages[user_id] = [t for t in user_messages[user_id] if now - t[0] < SPAM_CHECK_TIME * 2]
+            if not user_messages[user_id]:
+                del user_messages[user_id]
+        for key in list(user_button_presses.keys()):
+            user_button_presses[key] = [t for t in user_button_presses[key] if now - t < BUTTON_CHECK_TIME * 10]
+            if not user_button_presses[key]:
+                del user_button_presses[key]
+
+async def clean_old_logs():
+    while True:
+        await asyncio.sleep(86400)
+        old_time = int(time.time()) - 30 * 86400
+        with db.get_connection() as conn:
+            conn.execute('DELETE FROM violation_logs WHERE timestamp < ?', (old_time,))
+            conn.execute('DELETE FROM moderator_logs WHERE timestamp < ?', (old_time,))
+            conn.commit()
+
+# ==================== KEYBOARD BUILDERS ====================
 def create_button(text: str, callback_data: str, color: str = None):
     return InlineKeyboardButton(text=text, callback_data=callback_data)
 
@@ -1622,7 +1632,7 @@ def get_confirm_action_keyboard(action, user_id, duration=None, reason=None):
 
 def get_lift_restriction_keyboard(action, user_id, message_id):
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🔓 Снять ограничение", f"lift_{action}_{user_id}_{message_id}"))
+    builder.add(create_button("🔓 Снять", f"lift_{action}_{user_id}_{message_id}"))
     return builder.as_markup()
 
 def get_pm_link_keyboard():
@@ -1698,7 +1708,7 @@ def get_photos_list_keyboard(page=0):
     builder.adjust(1)
     return builder.as_markup()
 
-# ==================== ОСНОВНЫЕ ХЕНДЛЕРЫ ====================
+# ==================== MESSAGE HANDLERS ====================
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
@@ -1738,9 +1748,9 @@ async def cmd_group_settings(message: Message):
 @dp.message(F.text.lower().in_(["пульс", "понг"]))
 async def cmd_ping(message: Message):
     start = time.time()
-    msg = await message.reply("⏳ Измеряем пинг...")
+    msg = await message.reply("⏳ ...")
     ping = round((time.time() - start) * 1000)
-    await msg.edit_text(f"📡 Пинг: {ping} мс\n⏱ Время ответа: {ping/1000:.2f} сек", parse_mode="HTML")
+    await msg.edit_text(f"📡 Пинг: {ping} мс\n⏱ Время: {ping/1000:.2f} сек", parse_mode="HTML")
     await add_premium_reaction(message, "📡")
 
 @dp.message(Command("stats"))
@@ -1759,25 +1769,25 @@ async def cmd_stats(message: Message):
     warns = get_spammer_warnings(user.id)
     emoji = get_premium_status_emoji(gu['is_premium'])
     if not stat:
-        text = (f"Профиль {emoji} {user.full_name}\n\n" +
-                f"🆔 ID: <code>{gu['global_id']}</code>\n" +
-                f"📅 Впервые замечен: {format_datetime(gu['first_seen'])}\n" +
+        text = (customization.format_message('profile_header', premium_emoji=emoji, name=user.full_name) + "\n\n" +
+                customization.format_message('profile_id', global_id=gu['global_id']) + "\n" +
+                customization.format_message('profile_first_seen', first_seen=format_datetime(gu['first_seen'])) + "\n" +
                 ("⭐ Премиум пользователь\n" if gu['is_premium'] else "") +
-                f"🛡️ Антиспам база Puls: {warns}/{SPAM_WARN_LIMIT} предупреждений\n\n" +
-                "📊 У пользователя пока нет сообщений в этом чате")
+                customization.format_message('profile_antispam', warnings=warns, limit=SPAM_WARN_LIMIT) + "\n\n" +
+                customization.get_template('profile_no_stats').get_text())
     else:
-        text = (f"Профиль {emoji} {user.full_name}\n\n" +
-                f"🆔 ID: <code>{gu['global_id']}</code>\n" +
-                f"📅 Впервые замечен: {format_datetime(gu['first_seen'])}\n" +
+        text = (customization.format_message('profile_header', premium_emoji=emoji, name=user.full_name) + "\n\n" +
+                customization.format_message('profile_id', global_id=gu['global_id']) + "\n" +
+                customization.format_message('profile_first_seen', first_seen=format_datetime(gu['first_seen'])) + "\n" +
                 ("⭐ Премиум пользователь\n" if gu['is_premium'] else "") +
-                f"🛡️ Антиспам база Puls: {warns}/{SPAM_WARN_LIMIT} предупреждений\n\n" +
-                "📊 Статистика в этом чате:\n" +
-                f"• За день: {stat['day_messages']} 💬\n" +
-                f"• За неделю: {stat['week_messages']} 💬\n" +
-                f"• За месяц: {stat['month_messages']} 💬\n" +
-                f"• Всего: {stat['all_messages']} 💬\n" +
-                f"• Место в топе: {pos}")
-    await message.reply(text, parse_mode="HTML")
+                customization.format_message('profile_antispam', warnings=warns, limit=SPAM_WARN_LIMIT) + "\n\n" +
+                customization.get_template('profile_stats_header').get_text() + "\n" +
+                customization.format_message('profile_day', count=stat['day_messages']) + "\n" +
+                customization.format_message('profile_week', count=stat['week_messages']) + "\n" +
+                customization.format_message('profile_month', count=stat['month_messages']) + "\n" +
+                customization.format_message('profile_total', count=stat['all_messages']) + "\n" +
+                customization.format_message('profile_position', position=pos))
+    await message.reply(safe_html(text, True), parse_mode="HTML")
     await add_premium_reaction(message, "📊")
 
 @dp.message(Command("top"))
@@ -1791,7 +1801,7 @@ async def cmd_top(message: Message):
     if not top:
         await message.reply("📊 В этом чате пока нет сообщений")
         return
-    text = "🏆 Топ активных (всего сообщений):\n\n"
+    text = customization.get_template('top_header').get_text() + "\n\n"
     for i, (uid, count) in enumerate(top, 1):
         try:
             member = await bot.get_chat_member(message.chat.id, uid)
@@ -1804,8 +1814,8 @@ async def cmd_top(message: Message):
             warns = 0
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
         warning = f" ⚠️{warns}" if warns > 0 else ""
-        text += f"{medal} {emoji} {name} — {count} 💬{warning}\n"
-    await message.reply(text, parse_mode="HTML")
+        text += customization.format_message('top_entry', medal=medal, premium_emoji=emoji, name=name, count=count, warnings=warning) + "\n"
+    await message.reply(safe_html(text, True), parse_mode="HTML")
     await add_premium_reaction(message, "🏆")
 
 @dp.message(Command("profile"))
@@ -1816,7 +1826,7 @@ async def cmd_profile(message: Message):
             break
         await asyncio.sleep(0.1)
     if not message.reply_to_message:
-        await message.reply("❌ Ответьте на сообщение пользователя, чтобы увидеть его профиль")
+        await message.reply("❌ Ответьте на сообщение пользователя")
         return
     target = message.reply_to_message.from_user
     chat_id = message.chat.id
@@ -1828,25 +1838,25 @@ async def cmd_profile(message: Message):
     warns = get_spammer_warnings(target.id)
     emoji = get_premium_status_emoji(gu['is_premium'])
     if not stat:
-        text = (f"Профиль {emoji} {target.full_name}\n\n" +
-                f"🆔 ID: <code>{gu['global_id']}</code>\n" +
-                f"📅 Впервые замечен: {format_datetime(gu['first_seen'])}\n" +
+        text = (customization.format_message('profile_header', premium_emoji=emoji, name=target.full_name) + "\n\n" +
+                customization.format_message('profile_id', global_id=gu['global_id']) + "\n" +
+                customization.format_message('profile_first_seen', first_seen=format_datetime(gu['first_seen'])) + "\n" +
                 ("⭐ Премиум пользователь\n" if gu['is_premium'] else "") +
-                f"🛡️ Антиспам база Puls: {warns}/{SPAM_WARN_LIMIT} предупреждений\n\n" +
-                "📊 У пользователя пока нет сообщений в этом чате")
+                customization.format_message('profile_antispam', warnings=warns, limit=SPAM_WARN_LIMIT) + "\n\n" +
+                customization.get_template('profile_no_stats').get_text())
     else:
-        text = (f"Профиль {emoji} {target.full_name}\n\n" +
-                f"🆔 ID: <code>{gu['global_id']}</code>\n" +
-                f"📅 Впервые замечен: {format_datetime(gu['first_seen'])}\n" +
+        text = (customization.format_message('profile_header', premium_emoji=emoji, name=target.full_name) + "\n\n" +
+                customization.format_message('profile_id', global_id=gu['global_id']) + "\n" +
+                customization.format_message('profile_first_seen', first_seen=format_datetime(gu['first_seen'])) + "\n" +
                 ("⭐ Премиум пользователь\n" if gu['is_premium'] else "") +
-                f"🛡️ Антиспам база Puls: {warns}/{SPAM_WARN_LIMIT} предупреждений\n\n" +
-                "📊 Статистика в этом чате:\n" +
-                f"• За день: {stat['day_messages']} 💬\n" +
-                f"• За неделю: {stat['week_messages']} 💬\n" +
-                f"• За месяц: {stat['month_messages']} 💬\n" +
-                f"• Всего: {stat['all_messages']} 💬\n" +
-                f"• Место в топе: {pos}")
-    await message.reply(text, parse_mode="HTML")
+                customization.format_message('profile_antispam', warnings=warns, limit=SPAM_WARN_LIMIT) + "\n\n" +
+                customization.get_template('profile_stats_header').get_text() + "\n" +
+                customization.format_message('profile_day', count=stat['day_messages']) + "\n" +
+                customization.format_message('profile_week', count=stat['week_messages']) + "\n" +
+                customization.format_message('profile_month', count=stat['month_messages']) + "\n" +
+                customization.format_message('profile_total', count=stat['all_messages']) + "\n" +
+                customization.format_message('profile_position', position=pos))
+    await message.reply(safe_html(text, True), parse_mode="HTML")
     await add_premium_reaction(message, "👤")
 
 @dp.message(Command("rules"))
@@ -1854,10 +1864,10 @@ async def cmd_profile(message: Message):
 async def cmd_rules(message: Message):
     rules = db.get_rules_html(message.chat.id)
     if rules and db.get_rules_enabled(message.chat.id):
-        await message.reply(rules, parse_mode="HTML")
+        await message.reply(safe_html(rules, True), parse_mode="HTML")
         await add_premium_reaction(message, "📜")
     else:
-        await message.answer("❌ В этом чате ещё не установлены правила")
+        await message.answer("❌ Правила не установлены")
 
 @dp.message(Command("group"))
 @group_only()
@@ -1870,9 +1880,9 @@ async def cmd_group(message: Message):
         r = conn.execute('SELECT owner_id FROM group_rules WHERE chat_id = ?', (chat_id,)).fetchone()
         owner = r[0] if r else None
     if owner == user_id:
-        await message.answer("✅ Группа уже привязана к вашему аккаунту.\n\nВсе настройки доступны в личных сообщениях с ботом.\nНажмите кнопку ниже, чтобы перейти в ЛС.", reply_markup=get_pm_link_keyboard())
+        await message.answer("✅ Группа уже привязана.\nВсе настройки в ЛС.", reply_markup=get_pm_link_keyboard())
     else:
-        await message.answer("❌ Группа ещё не привязана к вашему аккаунту.\n\nНажмите кнопку ниже, чтобы привязать группу.\nПосле привязки вы сможете настраивать бота в ЛС.", reply_markup=get_link_group_keyboard(chat_id))
+        await message.answer("❌ Группа не привязана.\nНажмите кнопку ниже.", reply_markup=get_link_group_keyboard(chat_id))
     await add_premium_reaction(message, "⚙️")
 
 @dp.callback_query(F.data.startswith("link_group_"))
@@ -1882,7 +1892,7 @@ async def link_group(callback: CallbackQuery):
     chat_id = int(callback.data.split('_')[-1])
     user_id = callback.from_user.id
     if not await is_creator(chat_id, user_id):
-        await callback.answer("❌ Вы не создатель этой группы!", show_alert=True)
+        await callback.answer("❌ Вы не создатель группы!", show_alert=True)
         return
     try:
         chat = await bot.get_chat(chat_id)
@@ -1911,10 +1921,10 @@ async def cmd_mute(message: Message, state: FSMContext):
     chat_id = message.chat.id
     user_id = message.from_user.id
     if not await check_moderator_permission(chat_id, user_id, 'can_mute'):
-        await message.answer("❌ У вас нет права мутить пользователей!")
+        await message.answer("❌ Нет права мутить!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которого хотите замутить")
+        await message.answer("❌ Ответьте на сообщение пользователя")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
@@ -1926,25 +1936,22 @@ async def cmd_mute(message: Message, state: FSMContext):
     if db.get_confirmation_settings(chat_id).get('mute', False):
         await state.update_data(action='mute', target_id=target.id, target_name=target.full_name, duration=duration, reason=reason)
         duration_line = f"⏱ Длительность: {format_time(duration)}\n" if duration else ""
-        await message.answer(f"⚠️ Подтвердите действие\n\nВы хотите замутить {target.full_name}\n{duration_line}Причина: {reason}\n\nПодтвердите действие:", reply_markup=get_confirm_action_keyboard('mute', target.id, duration, reason), parse_mode="HTML")
+        await message.answer(customization.format_message('confirm_action', action="замутить", name=target.full_name, duration_line=duration_line, reason=reason),
+                             reply_markup=get_confirm_action_keyboard('mute', target.id, duration, reason), parse_mode="HTML")
         await state.set_state(ModerationStates.waiting_for_confirm_action)
         return
-    await execute_mute(chat_id, target.id, target.full_name, duration, reason, message.from_user, message.message_id)
+    await execute_mute(chat_id, target.id, target.full_name, duration, reason, message.from_user)
 
-async def execute_mute(chat_id, target_id, target_name, duration, reason, moderator, message_id):
+async def execute_mute(chat_id, target_id, target_name, duration, reason, moderator):
     try:
         until = int(time.time() + duration) if duration > 0 else None
         await bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False), until_date=until)
-        message_link = get_message_link(chat_id, message_id)
-        user_link = f"<a href='tg://user?id={target_id}'>{target_name}</a>"
-        mod_link = f"<a href='tg://user?id={moderator.id}'>{moderator.full_name}</a>"
-        duration_text = format_time(duration) if duration > 0 else "навсегда"
-        mute_text = f"🔇 Мут\n\n👤 Нарушитель: {user_link}\n📝 Причина: {reason}\n⏱ Длительность: {duration_text}\n👮 Модератор: {mod_link}\n\n🔗 <a href='{message_link}'>Перейти к сообщению</a>"
-        await bot.send_message(chat_id, mute_text, reply_markup=get_lift_restriction_keyboard('mute', target_id, message_id))
+        await bot.send_message(chat_id, customization.format_message('mute_message', name=target_name, moderator=moderator.full_name,
+                               duration=format_time(duration), reason=reason), parse_mode="HTML")
         db.log_moderator_action(chat_id, moderator.id, moderator.full_name, 'mute', target_id, target_name, duration, reason)
-        await send_to_log_group(chat_id, 'mod_action', mute_text)
+        await send_to_log_group(chat_id, 'mod_action', f"🔇 Мут {target_name}: {reason} на {format_time(duration)}")
     except Exception as e:
-        await bot.send_message(chat_id, f"❌ Ошибка при муте: {e}")
+        await bot.send_message(chat_id, f"❌ Ошибка: {e}")
 
 @dp.message(Command("unmute"))
 @group_only()
@@ -1952,21 +1959,19 @@ async def cmd_unmute(message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     if not await check_moderator_permission(chat_id, user_id, 'can_mute'):
-        await message.answer("❌ У вас нет права размучивать пользователей!")
+        await message.answer("❌ Нет права размучивать!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которого хотите размутить")
+        await message.answer("❌ Ответьте на сообщение пользователя")
         return
     target = message.reply_to_message.from_user
     try:
-        await bot.restrict_chat_member(chat_id, target.id, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True))
-        user_link = f"<a href='tg://user?id={target.id}'>{target.full_name}</a>"
-        mod_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
-        unmute_text = f"🔊 Размут\n\n👤 Пользователь: {user_link}\n👮 Модератор: {mod_link}"
-        await message.answer(unmute_text, parse_mode="HTML")
-        await send_to_log_group(chat_id, 'mod_action', unmute_text)
+        await bot.restrict_chat_member(chat_id, target.id, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True,
+                                       can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True))
+        await message.answer(customization.format_message('unmute_message', name=target.full_name, moderator=message.from_user.full_name), parse_mode="HTML")
+        await send_to_log_group(chat_id, 'mod_action', f"🔊 Размут {target.full_name}")
     except Exception as e:
-        await message.answer(f"❌ Ошибка при размуте: {e}")
+        await message.answer(f"❌ Ошибка: {e}")
 
 @dp.message(Command("ban"))
 @group_only()
@@ -1974,10 +1979,10 @@ async def cmd_ban(message: Message, state: FSMContext):
     chat_id = message.chat.id
     user_id = message.from_user.id
     if not await check_moderator_permission(chat_id, user_id, 'can_ban'):
-        await message.answer("❌ У вас нет права банить пользователей!")
+        await message.answer("❌ Нет права банить!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которого хотите забанить")
+        await message.answer("❌ Ответьте на сообщение пользователя")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
@@ -1989,25 +1994,22 @@ async def cmd_ban(message: Message, state: FSMContext):
     if db.get_confirmation_settings(chat_id).get('ban', False):
         await state.update_data(action='ban', target_id=target.id, target_name=target.full_name, duration=duration, reason=reason)
         duration_line = f"⏱ Длительность: {format_time(duration)}\n" if duration else ""
-        await message.answer(f"⚠️ Подтвердите действие\n\nВы хотите забанить {target.full_name}\n{duration_line}Причина: {reason}\n\nПодтвердите действие:", reply_markup=get_confirm_action_keyboard('ban', target.id, duration, reason), parse_mode="HTML")
+        await message.answer(customization.format_message('confirm_action', action="забанить", name=target.full_name, duration_line=duration_line, reason=reason),
+                             reply_markup=get_confirm_action_keyboard('ban', target.id, duration, reason), parse_mode="HTML")
         await state.set_state(ModerationStates.waiting_for_confirm_action)
         return
-    await execute_ban(chat_id, target.id, target.full_name, duration, reason, message.from_user, message.message_id)
+    await execute_ban(chat_id, target.id, target.full_name, duration, reason, message.from_user)
 
-async def execute_ban(chat_id, target_id, target_name, duration, reason, moderator, message_id):
+async def execute_ban(chat_id, target_id, target_name, duration, reason, moderator):
     try:
         until = int(time.time() + duration) if duration > 0 else None
         await bot.ban_chat_member(chat_id, target_id, until_date=until)
-        message_link = get_message_link(chat_id, message_id)
-        user_link = f"<a href='tg://user?id={target_id}'>{target_name}</a>"
-        mod_link = f"<a href='tg://user?id={moderator.id}'>{moderator.full_name}</a>"
-        duration_text = format_time(duration) if duration > 0 else "навсегда"
-        ban_text = f"⛔ Бан\n\n👤 Нарушитель: {user_link}\n📝 Причина: {reason}\n⏱ Длительность: {duration_text}\n👮 Модератор: {mod_link}\n\n🔗 <a href='{message_link}'>Перейти к сообщению</a>"
-        await bot.send_message(chat_id, ban_text, reply_markup=get_lift_restriction_keyboard('ban', target_id, message_id))
+        await bot.send_message(chat_id, customization.format_message('ban_message', name=target_name, moderator=moderator.full_name,
+                               duration=format_time(duration), reason=reason), parse_mode="HTML")
         db.log_moderator_action(chat_id, moderator.id, moderator.full_name, 'ban', target_id, target_name, duration, reason)
-        await send_to_log_group(chat_id, 'mod_action', ban_text)
+        await send_to_log_group(chat_id, 'mod_action', f"⛔ Бан {target_name}: {reason} на {format_time(duration)}")
     except Exception as e:
-        await bot.send_message(chat_id, f"❌ Ошибка при бане: {e}")
+        await bot.send_message(chat_id, f"❌ Ошибка: {e}")
 
 @dp.message(Command("kick"))
 @group_only()
@@ -2015,10 +2017,10 @@ async def cmd_kick(message: Message, state: FSMContext):
     chat_id = message.chat.id
     user_id = message.from_user.id
     if not await check_moderator_permission(chat_id, user_id, 'can_kick'):
-        await message.answer("❌ У вас нет права кикать пользователей!")
+        await message.answer("❌ Нет права кикать!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которого хотите кикнуть")
+        await message.answer("❌ Ответьте на сообщение пользователя")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
@@ -2028,24 +2030,21 @@ async def cmd_kick(message: Message, state: FSMContext):
     reason = args[1] if len(args) > 1 else "Не указана"
     if db.get_confirmation_settings(chat_id).get('kick', False):
         await state.update_data(action='kick', target_id=target.id, target_name=target.full_name, reason=reason)
-        await message.answer(f"⚠️ Подтвердите действие\n\nВы хотите кикнуть {target.full_name}\nПричина: {reason}\n\nПодтвердите действие:", reply_markup=get_confirm_action_keyboard('kick', target.id, reason=reason), parse_mode="HTML")
+        await message.answer(customization.format_message('confirm_action', action="кикнуть", name=target.full_name, duration_line="", reason=reason),
+                             reply_markup=get_confirm_action_keyboard('kick', target.id, reason=reason), parse_mode="HTML")
         await state.set_state(ModerationStates.waiting_for_confirm_action)
         return
-    await execute_kick(chat_id, target.id, target.full_name, reason, message.from_user, message.message_id)
+    await execute_kick(chat_id, target.id, target.full_name, reason, message.from_user)
 
-async def execute_kick(chat_id, target_id, target_name, reason, moderator, message_id):
+async def execute_kick(chat_id, target_id, target_name, reason, moderator):
     try:
         await bot.ban_chat_member(chat_id, target_id)
         await bot.unban_chat_member(chat_id, target_id)
-        message_link = get_message_link(chat_id, message_id)
-        user_link = f"<a href='tg://user?id={target_id}'>{target_name}</a>"
-        mod_link = f"<a href='tg://user?id={moderator.id}'>{moderator.full_name}</a>"
-        kick_text = f"👢 Кик\n\n👤 Нарушитель: {user_link}\n📝 Причина: {reason}\n👮 Модератор: {mod_link}\n\n🔗 <a href='{message_link}'>Перейти к сообщению</a>"
-        await bot.send_message(chat_id, kick_text)
+        await bot.send_message(chat_id, customization.format_message('kick_message', name=target_name, moderator=moderator.full_name, reason=reason), parse_mode="HTML")
         db.log_moderator_action(chat_id, moderator.id, moderator.full_name, 'kick', target_id, target_name, 0, reason)
-        await send_to_log_group(chat_id, 'mod_action', kick_text)
+        await send_to_log_group(chat_id, 'mod_action', f"👢 Кик {target_name}: {reason}")
     except Exception as e:
-        await bot.send_message(chat_id, f"❌ Ошибка при кике: {e}")
+        await bot.send_message(chat_id, f"❌ Ошибка: {e}")
 
 @dp.message(Command("warn"))
 @group_only()
@@ -2053,10 +2052,10 @@ async def cmd_warn(message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     if not await check_moderator_permission(chat_id, user_id, 'can_warn'):
-        await message.answer("❌ У вас нет права выдавать предупреждения!")
+        await message.answer("❌ Нет права выдавать предупреждения!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которого хотите предупредить")
+        await message.answer("❌ Ответьте на сообщение пользователя")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
@@ -2066,16 +2065,13 @@ async def cmd_warn(message: Message):
     reason = args[1] if len(args) > 1 else "Не указана"
     count = db.add_user_warn(chat_id, target.id)
     max_warns = db.get_max_warns_settings(chat_id)['max_warns']
-    message_link = get_message_link(chat_id, message.message_id)
-    user_link = f"<a href='tg://user?id={target.id}'>{target.full_name}</a>"
-    mod_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
-    warn_text = f"⚠️ Варн | {count}/{max_warns}\n\n👤 Нарушитель: {user_link}\n📝 Причина: {reason}\n👮 Модератор: {mod_link}\n\n🔗 <a href='{message_link}'>Перейти к сообщению</a>"
-    await message.answer(warn_text, parse_mode="HTML")
+    await message.answer(customization.format_message('warn_message', name=target.full_name, moderator=message.from_user.full_name,
+                         warn_count=count, max_warns=max_warns, reason=reason), parse_mode="HTML")
     db.log_moderator_action(chat_id, message.from_user.id, message.from_user.full_name, 'warn', target.id, target.full_name, 0, reason)
-    await send_to_log_group(chat_id, 'mod_action', warn_text)
+    await send_to_log_group(chat_id, 'mod_action', f"⚠️ Варн {target.full_name} ({count}/{max_warns}): {reason}")
     if count >= max_warns:
         ws = db.get_max_warns_settings(chat_id)
-        await execute_ban(chat_id, target.id, target.full_name, ws['duration'], f"Превышение лимита варнов ({count}/{max_warns})", message.from_user, message.message_id)
+        await execute_ban(chat_id, target.id, target.full_name, ws['duration'], f"Превышение лимита варнов ({count}/{max_warns})", message.from_user)
         db.reset_user_warns(chat_id, target.id)
 
 @dp.message(Command("unban"))
@@ -2084,7 +2080,7 @@ async def cmd_unban(message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     if not await is_admin(chat_id, user_id) and not await check_moderator_permission(chat_id, user_id, 'can_ban'):
-        await message.answer("❌ У вас нет права разбанивать пользователей!")
+        await message.answer("❌ Нет права разбанивать!")
         return
     if not message.reply_to_message:
         await message.answer("❌ Ответьте на сообщение пользователя или укажите ID")
@@ -2093,20 +2089,17 @@ async def cmd_unban(message: Message):
     try:
         await bot.unban_chat_member(chat_id, target.id)
         unban_spammer_in_chat(target.id, chat_id)
-        user_link = f"<a href='tg://user?id={target.id}'>{target.full_name}</a>"
-        mod_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
-        unban_text = f"✅ Разбан\n\n👤 Пользователь: {user_link}\n👮 Модератор: {mod_link}"
-        await message.answer(unban_text, parse_mode="HTML")
-        await send_to_log_group(chat_id, 'mod_action', unban_text)
+        await message.answer(f"✅ {target.full_name} разбанен")
+        await send_to_log_group(chat_id, 'mod_action', f"✅ Разбан {target.full_name}")
     except Exception as e:
-        await message.answer(f"❌ Ошибка при разбане: {e}")
+        await message.answer(f"❌ Ошибка: {e}")
 
 @dp.message(Command("mods"))
 @group_only()
 async def cmd_mods(message: Message):
     chat_id = message.chat.id
     mods = db.get_all_moderators(chat_id)
-    text = "🛡️ Модераторы группы:\n\n"
+    text = "🛡️ Модераторы:\n\n"
     try:
         creator = await bot.get_chat(chat_id)
         cm = await bot.get_chat_member(chat_id, creator.id)
@@ -2114,16 +2107,15 @@ async def cmd_mods(message: Message):
     except:
         pass
     if mods:
-        text += "👮 Назначенные модераторы:\n"
         for m in mods:
             try:
                 u = await bot.get_chat_member(chat_id, m[0])
                 rights = []
-                if m[1]: rights.append("🔇 мут")
-                if m[2]: rights.append("👢 кик")
-                if m[3]: rights.append("⛔ бан")
-                if m[4]: rights.append("⚠️ варн")
-                text += f"• {u.user.full_name} - {', '.join(rights) if rights else 'нет прав'}\n"
+                if m[1]: rights.append("🔇")
+                if m[2]: rights.append("👢")
+                if m[3]: rights.append("⛔")
+                if m[4]: rights.append("⚠️")
+                text += f"• {u.user.full_name} - {' '.join(rights) or 'нет прав'}\n"
             except:
                 continue
     await message.answer(text, parse_mode="HTML")
@@ -2133,136 +2125,128 @@ async def cmd_mods(message: Message):
 async def cmd_give_mute(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может выдавать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которому хотите дать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
-        await message.answer("❌ Нельзя давать права боту!")
+        await message.answer("❌ Нельзя боту!")
         return
     db.set_moderator_permission(chat_id, target.id, 'can_mute', True, message.from_user.id)
-    user_link = f"<a href='tg://user?id={target.id}'>{target.full_name}</a>"
-    mod_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
-    await message.answer(f"✅ Пользователю {user_link} выдано право мутить", parse_mode="HTML")
-    await send_to_log_group(chat_id, 'mod_action', f"🔇 {user_link} получил право мутить от {mod_link}")
+    await message.answer(f"✅ {target.full_name} получил право мутить")
+    await send_to_log_group(chat_id, 'mod_action', f"🔇 {target.full_name} получил право мутить")
 
 @dp.message(Command("give_kick"))
 @group_only()
 async def cmd_give_kick(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может выдавать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которому хотите дать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
-        await message.answer("❌ Нельзя давать права боту!")
+        await message.answer("❌ Нельзя боту!")
         return
     db.set_moderator_permission(chat_id, target.id, 'can_kick', True, message.from_user.id)
-    user_link = f"<a href='tg://user?id={target.id}'>{target.full_name}</a>"
-    mod_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
-    await message.answer(f"✅ Пользователю {user_link} выдано право кикать", parse_mode="HTML")
-    await send_to_log_group(chat_id, 'mod_action', f"👢 {user_link} получил право кикать от {mod_link}")
+    await message.answer(f"✅ {target.full_name} получил право кикать")
+    await send_to_log_group(chat_id, 'mod_action', f"👢 {target.full_name} получил право кикать")
 
 @dp.message(Command("give_ban"))
 @group_only()
 async def cmd_give_ban(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может выдавать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которому хотите дать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
-        await message.answer("❌ Нельзя давать права боту!")
+        await message.answer("❌ Нельзя боту!")
         return
     db.set_moderator_permission(chat_id, target.id, 'can_ban', True, message.from_user.id)
-    user_link = f"<a href='tg://user?id={target.id}'>{target.full_name}</a>"
-    mod_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
-    await message.answer(f"✅ Пользователю {user_link} выдано право банить", parse_mode="HTML")
-    await send_to_log_group(chat_id, 'mod_action', f"⛔ {user_link} получил право банить от {mod_link}")
+    await message.answer(f"✅ {target.full_name} получил право банить")
+    await send_to_log_group(chat_id, 'mod_action', f"⛔ {target.full_name} получил право банить")
 
 @dp.message(Command("give_warn"))
 @group_only()
 async def cmd_give_warn(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может выдавать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, которому хотите дать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     if target.is_bot:
-        await message.answer("❌ Нельзя давать права боту!")
+        await message.answer("❌ Нельзя боту!")
         return
     db.set_moderator_permission(chat_id, target.id, 'can_warn', True, message.from_user.id)
-    user_link = f"<a href='tg://user?id={target.id}'>{target.full_name}</a>"
-    mod_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
-    await message.answer(f"✅ Пользователю {user_link} выдано право выдавать предупреждения", parse_mode="HTML")
-    await send_to_log_group(chat_id, 'mod_action', f"⚠️ {user_link} получил право варнить от {mod_link}")
+    await message.answer(f"✅ {target.full_name} получил право варнить")
+    await send_to_log_group(chat_id, 'mod_action', f"⚠️ {target.full_name} получил право варнить")
 
 @dp.message(Command("ungive_mute"))
 @group_only()
 async def cmd_ungive_mute(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может забирать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, у которого хотите забрать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target.id, 'can_mute', False, message.from_user.id)
-    await message.answer(f"✅ У пользователя {target.full_name} забрано право мутить")
+    await message.answer(f"✅ У {target.full_name} забрано право мутить")
 
 @dp.message(Command("ungive_kick"))
 @group_only()
 async def cmd_ungive_kick(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может забирать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, у которого хотите забрать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target.id, 'can_kick', False, message.from_user.id)
-    await message.answer(f"✅ У пользователя {target.full_name} забрано право кикать")
+    await message.answer(f"✅ У {target.full_name} забрано право кикать")
 
 @dp.message(Command("ungive_ban"))
 @group_only()
 async def cmd_ungive_ban(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может забирать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, у которого хотите забрать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target.id, 'can_ban', False, message.from_user.id)
-    await message.answer(f"✅ У пользователя {target.full_name} забрано право банить")
+    await message.answer(f"✅ У {target.full_name} забрано право банить")
 
 @dp.message(Command("ungive_warn"))
 @group_only()
 async def cmd_ungive_warn(message: Message):
     chat_id = message.chat.id
     if not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Только создатель группы может забирать права!")
+        await message.answer("❌ Только создатель!")
         return
     if not message.reply_to_message:
-        await message.answer("❌ Ответьте на сообщение пользователя, у которого хотите забрать права")
+        await message.answer("❌ Ответьте на сообщение")
         return
     target = message.reply_to_message.from_user
     db.set_moderator_permission(chat_id, target.id, 'can_warn', False, message.from_user.id)
-    await message.answer(f"✅ У пользователя {target.full_name} забрано право выдавать предупреждения")
+    await message.answer(f"✅ У {target.full_name} забрано право варнить")
 
 @dp.message(Command("loggroup"))
 @group_only()
@@ -2291,7 +2275,8 @@ async def cmd_loggroup(message: Message, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.add(create_button("✅ Запомнить", f"save_log_group_{chat_id}", "success"))
     builder.add(create_button("❌ Отмена", "cancel_save_log_group", "danger"))
-    await message.answer(f"📋 Группа логов\n\nНазвание: {message.chat.title}\nID: <code>{chat_id}</code>\n\nЗапомнить эту группу как группу для логов?", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await message.answer(f"📋 <b>Группа логов</b>\n\nНазвание: {message.chat.title}\nID: <code>{chat_id}</code>\n\nЗапомнить эту группу как группу для логов?",
+                         reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(LogGroupStates.waiting_for_confirmation)
 
 @dp.callback_query(F.data.startswith("save_log_group_"))
@@ -2302,7 +2287,8 @@ async def save_log_group(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     group_title = data.get('log_group_title', 'Группа логов')
     db.create_log_group(log_group_id, user_id, group_title)
-    await callback.message.edit_text(f"✅ Группа логов сохранена!\n\nНазвание: {group_title}\nID: <code>{log_group_id}</code>\n\nТеперь вы можете привязать эту группу к вашим чатам в настройках.", parse_mode="HTML")
+    await callback.message.edit_text(f"✅ <b>Группа логов сохранена!</b>\n\nНазвание: {group_title}\nID: <code>{log_group_id}</code>\n\nТеперь вы можете привязать эту группу к вашим чатам в настройках.",
+                                     parse_mode="HTML")
     await callback.answer("✅ Группа сохранена!")
     await state.clear()
 
@@ -2313,11 +2299,23 @@ async def cancel_save_log_group(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
 
+@dp.callback_query(F.data == "log_group_help")
+@edit_only()
+async def log_group_help(callback: CallbackQuery):
+    await callback.message.edit_text("📋 <b>Как создать группу логов</b>\n\n1️⃣ Создайте новую группу в Telegram (обычную, не привязанную к каналу)\n2️⃣ Добавьте бота в эту группу\n3️⃣ Выдайте боту права администратора\n4️⃣ В этой группе напишите команду <code>/loggroup</code>\n5️⃣ Нажмите «Запомнить»\n\nПосле этого группа будет сохранена и появится в списке групп логов в настройках.",
+                                     reply_markup=get_back_keyboard("log_group_manage"), parse_mode="HTML")
+    await callback.answer()
+
 @dp.message(F.new_chat_members)
 async def on_bot_added(message: Message):
     bot_info = await bot.get_me()
     if any(m.id == bot_info.id for m in message.new_chat_members):
-        await message.answer("👋 Спасибо, что добавили Puls Chat Manager!\n\nПока я работаю в ограниченном режиме.\nЧтобы я мог полностью защищать чат (правила, антифлуд, модерация):\n1️⃣ Сделайте меня администратором\n2️⃣ Напишите команду /group в этой группе\n\nВсе настройки будут доступны в ЛС с ботом.", parse_mode="HTML")
+        await message.answer("👋 <b>Спасибо, что добавили Puls Chat Manager!</b>\n\n"
+                            "Пока я работаю в ограниченном режиме.\n"
+                            "Чтобы я мог полностью защищать чат:\n"
+                            "1️⃣ Сделайте меня администратором\n"
+                            "2️⃣ Напишите /group в этой группе\n\n"
+                            "Все настройки будут доступны в ЛС.", parse_mode="HTML")
 
 @dp.chat_member()
 async def on_member_join(update: ChatMemberUpdated):
@@ -2332,15 +2330,14 @@ async def on_member_join(update: ChatMemberUpdated):
             if len(raid_detector[chat_id]) >= raid['limit']:
                 raid_detector[chat_id].clear()
                 await bot.send_message(chat_id, customization.format_message('raid_detected', window=raid['window'], count=raid['limit'], duration=format_time(raid['duration'])), parse_mode="HTML")
-                await execute_ban(chat_id, user.id, user.full_name, raid['duration'], "Рейд-атака (массовое вступление)", bot, 0)
+                await execute_ban(chat_id, user.id, user.full_name, raid['duration'], "Рейд-атака", bot)
                 return
         db.add_user_stat(chat_id, user.id, int(time.time()))
-        user_link = f"<a href='tg://user?id={user.id}'>{user.full_name}</a>"
-        await send_to_log_group(chat_id, 'join', f"👋 Вход\n\n👤 Пользователь: {user_link}\n🆔 ID: <code>{user.id}</code>")
+        await send_to_log_group(chat_id, 'join', f"👋 Вход: {user.full_name} (ID: {user.id})")
         if check_spammer(user.id, chat_id)[0] and db.get_puls_antispam_enabled(chat_id):
             try:
                 await bot.ban_chat_member(chat_id, user.id)
-                await bot.send_message(chat_id, customization.format_message('spammer_detected', user_link=user_link, reason="спам-база", warnings=0, limit=SPAM_WARN_LIMIT, user_id=user.id), parse_mode="HTML")
+                await bot.send_message(chat_id, customization.format_message('spammer_detected', user_link=user.full_name, reason="спам-база", warnings=0, limit=SPAM_WARN_LIMIT), parse_mode="HTML")
                 return
             except:
                 pass
@@ -2349,8 +2346,7 @@ async def on_member_join(update: ChatMemberUpdated):
 @dp.chat_member(F.new_chat_member.status == "left")
 async def on_member_left(update: ChatMemberUpdated):
     db.set_left_chat(update.chat.id, update.from_user.id)
-    user_link = f"<a href='tg://user?id={update.from_user.id}'>{update.from_user.full_name}</a>"
-    await send_to_log_group(update.chat.id, 'leave', f"👋 Выход\n\n👤 Пользователь: {user_link}\n🆔 ID: <code>{update.from_user.id}</code>")
+    await send_to_log_group(update.chat.id, 'leave', f"👋 Выход: {update.from_user.full_name} (ID: {update.from_user.id})")
 
 async def send_simple_welcome(chat_id, user):
     is_premium = getattr(user, 'is_premium', False)
@@ -2358,15 +2354,15 @@ async def send_simple_welcome(chat_id, user):
     stat = db.get_user_stat(chat_id, user.id)
     pos = db.get_user_position(chat_id, user.id, 'all')
     warns = get_spammer_warnings(user.id)
-    welcome_text = customization.format_message('welcome_simple', premium_emoji=get_premium_status_emoji(gu['is_premium']), name=user.full_name,
+    text = customization.format_message('welcome_simple', premium_emoji=get_premium_status_emoji(gu['is_premium']), name=user.full_name,
             global_id=gu['global_id'], first_seen=format_datetime(gu['first_seen']),
             premium_line=("⭐ Премиум пользователь\n" if gu['is_premium'] else ""), warnings=warns, limit=SPAM_WARN_LIMIT,
             username=user.username or 'нет', user_id=user.id, join_dt=format_datetime(stat['join_date'] if stat else time.time()), position=pos)
     wtext, wphoto = db.get_welcome(chat_id)
     if wphoto:
-        await bot.send_photo(chat_id, wphoto, caption=welcome_text + (f"\n\n{wtext}" if wtext else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
+        await bot.send_photo(chat_id, wphoto, caption=text + (f"\n\n{wtext}" if wtext else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
     else:
-        await bot.send_message(chat_id, welcome_text + (f"\n\n{wtext}" if wtext else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
+        await bot.send_message(chat_id, text + (f"\n\n{wtext}" if wtext else ""), reply_markup=get_welcome_buttons(chat_id), parse_mode="HTML")
 
 @dp.message(F.chat.type.in_({"group", "supergroup"}))
 async def handle_group_message(message: Message):
@@ -2380,13 +2376,13 @@ async def handle_group_message(message: Message):
         if trigger.lower() in text:
             try:
                 if rtype == 'text':
-                    await message.reply(resp or "", parse_mode="HTML", disable_notification=True)
+                    await message.reply(safe_html(resp or "", False), parse_mode="HTML", disable_notification=True)
                 elif rtype == 'photo' and media:
-                    await message.reply_photo(media, caption=resp or None, parse_mode="HTML")
+                    await message.reply_photo(media, caption=safe_html(resp or "", False) if resp else None, parse_mode="HTML")
                 elif rtype == 'video' and media:
-                    await message.reply_video(media, caption=resp or None, parse_mode="HTML")
+                    await message.reply_video(media, caption=safe_html(resp or "", False) if resp else None, parse_mode="HTML")
                 elif rtype == 'animation' and media:
-                    await message.reply_animation(media, caption=resp or None, parse_mode="HTML")
+                    await message.reply_animation(media, caption=safe_html(resp or "", False) if resp else None, parse_mode="HTML")
                 elif rtype == 'sticker' and media:
                     await message.reply_sticker(media)
                 elif rtype == 'voice' and media:
@@ -2394,25 +2390,24 @@ async def handle_group_message(message: Message):
                 elif rtype == 'video_note' and media:
                     await message.reply_video_note(media)
                 elif rtype == 'document' and media:
-                    await message.reply_document(media, caption=resp or None, parse_mode="HTML")
+                    await message.reply_document(media, caption=safe_html(resp or "", False) if resp else None, parse_mode="HTML")
                 return
             except Exception as e:
                 logger.error(f"Ошибка автоответа: {e}")
 
-@dp.message(F.chat.type == "supergroup", F.forward_from_chat)
+@dp.message(F.is_automatic_forward | F.forward_from_chat)
 async def handle_channel_post(message: Message):
-    chat_id = message.chat.id
+    if not message.forward_from_chat or not message.forward_from_chat.linked_chat_id:
+        return
+    chat_id = message.forward_from_chat.linked_chat_id
     settings = db.get_auto_comment_settings(chat_id)
     if not settings['enabled']:
         return
     if not settings['text'] and not settings['media_id']:
         return
     channel = message.forward_from_chat
-    if channel.username:
-        post_link = f"https://t.me/{channel.username}/{message.message_id}"
-    else:
-        post_link = f"https://t.me/c/{str(channel.id).replace('-100', '')}/{message.message_id}"
-    text = (settings['text'] or "").replace("{post_link}", post_link).replace("{channel_title}", channel.title or "Канал")
+    post_link = f"https://t.me/{channel.username or 'c'}/{message.message_id}"
+    text = (settings['text'] or "").replace("{post_link}", post_link).replace("{channel_title}", channel.title or "канал")
     try:
         if settings['media_id']:
             if settings['media_type'] == 'photo':
@@ -2423,10 +2418,10 @@ async def handle_channel_post(message: Message):
                 await bot.send_animation(chat_id, settings['media_id'], caption=text, parse_mode="HTML")
             elif settings['media_type'] == 'sticker':
                 await bot.send_sticker(chat_id, settings['media_id'])
-        else:
+        elif text:
             await bot.send_message(chat_id, text, parse_mode="HTML")
     except Exception as e:
-        logger.error(f"Ошибка авто-комментария в чате {chat_id}: {e}")
+        logger.error(f"Ошибка авто-комментария: {e}")
 
 @dp.callback_query(F.data == "back_to_main")
 @edit_only()
@@ -2435,7 +2430,7 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     is_admin = callback.from_user.id in ADMIN_IDS
     is_group = callback.message.chat.type != 'private'
-    await callback.message.edit_text("👋 Главное меню\n\nВыберите раздел:", reply_markup=get_main_keyboard(is_group, is_admin))
+    await callback.message.edit_text("👋 Главное меню", reply_markup=get_main_keyboard(is_group, is_admin))
     await callback.answer()
 
 @dp.callback_query(F.data == "group_manage_main")
@@ -2444,14 +2439,14 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
 async def group_manage_main(callback: CallbackQuery):
     groups = db.get_user_groups(callback.from_user.id)
     if not groups:
-        await callback.answer("❌ У вас нет привязанных групп!", show_alert=True)
+        await callback.answer("❌ Нет групп!", show_alert=True)
         return
     builder = InlineKeyboardBuilder()
     for chat_id, title in groups:
         builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}"))
     builder.add(create_button("◀ Назад", "back_to_main"))
     builder.adjust(1)
-    await callback.message.edit_text("📱 Ваши группы\n\nВыберите группу для настройки:", reply_markup=builder.as_markup())
+    await callback.message.edit_text("📱 Ваши группы:", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("select_group_"))
@@ -2460,13 +2455,13 @@ async def group_manage_main(callback: CallbackQuery):
 async def select_group(callback: CallbackQuery, state: FSMContext):
     chat_id = int(callback.data.split('_')[-1])
     if not await is_creator(chat_id, callback.from_user.id):
-        await callback.answer("❌ Вы больше не являетесь создателем этой группы!", show_alert=True)
+        await callback.answer("❌ Вы не создатель!", show_alert=True)
         return
     await state.update_data(selected_chat_id=chat_id, **{f"msg_owner_{callback.message.message_id}": callback.from_user.id})
     with db.get_connection() as conn:
         r = conn.execute('SELECT chat_title FROM group_rules WHERE chat_id = ?', (chat_id,)).fetchone()
         title = r[0] if r else "Группа"
-    await callback.message.edit_text(f"⚙️ Настройка группы: {title}\n\nВыберите действие:", reply_markup=get_group_manage_keyboard())
+    await callback.message.edit_text(f"⚙️ Настройка: {title}", reply_markup=get_group_manage_keyboard())
     await callback.answer()
 
 @dp.callback_query(F.data == "back_to_groups")
@@ -2480,10 +2475,9 @@ async def back_to_groups(callback: CallbackQuery, state: FSMContext):
         builder.add(create_button(title or f"Группа {chat_id}", f"select_group_{chat_id}"))
     builder.add(create_button("◀ Назад", "back_to_main"))
     builder.adjust(1)
-    await callback.message.edit_text("📱 Ваши группы\n\nВыберите группу:", reply_markup=builder.as_markup())
+    await callback.message.edit_text("📱 Ваши группы:", reply_markup=builder.as_markup())
     await callback.answer()
 
-# ==================== НАСТРОЙКИ ГРУППЫ ====================
 @dp.callback_query(F.data == "links_manage")
 @edit_only()
 @check_owner()
@@ -2491,11 +2485,11 @@ async def links_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     settings = db.get_links_filter_settings(chat_id)
-    status = "✅ Включен" if settings['enabled'] else "❌ Выключен"
-    await callback.message.edit_text(f"🔗 Анти-ссылки\n\nСтатус: {status}\nНаказание: {settings['punishment']}\nДлительность: {format_time(settings['duration'])}\n\nБлокирует любые ссылки (http, https, t.me, telegram.me)", reply_markup=get_links_manage_keyboard(settings))
+    await callback.message.edit_text(f"🔗 Анти-ссылки\n\nСтатус: {'✅ Вкл' if settings['enabled'] else '❌ Выкл'}\nНаказание: {settings['punishment']}\nДлительность: {format_time(settings['duration'])}",
+                                      reply_markup=get_links_manage_keyboard(settings))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_links_filter")
@@ -2505,7 +2499,7 @@ async def toggle_links_filter(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_links_filter_settings(chat_id)
     db.set_links_filter_settings(chat_id, not s['enabled'], s['punishment'], s['duration'])
@@ -2516,7 +2510,7 @@ async def toggle_links_filter(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_links_punishment(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Выберите наказание для ссылок:", reply_markup=get_punishment_keyboard("links"))
+    await callback.message.edit_text("Выберите наказание:", reply_markup=get_punishment_keyboard("links"))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_links_duration")
@@ -2531,7 +2525,7 @@ async def set_links_duration(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def links_filter_info(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("ℹ️ Что такое анти-ссылки?\n\nБот автоматически обнаруживает и блокирует сообщения, содержащие ссылки:\n• http://, https://\n• t.me, telegram.me\n\nПри обнаружении ссылки применяется наказание:\n• Warn - предупреждение\n• Mute - ограничение на отправку сообщений\n• Kick - удаление из чата\n• Ban - блокировка в чате", reply_markup=get_back_keyboard("links_manage"))
+    await callback.message.edit_text("ℹ️ Анти-ссылки блокируют http://, https://, t.me, telegram.me", reply_markup=get_back_keyboard("links_manage"))
     await callback.answer()
 
 @dp.callback_query(F.data == "profanity_manage")
@@ -2541,11 +2535,11 @@ async def profanity_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_profanity_filter_settings(chat_id)
-    status = "✅ Включен" if s['enabled'] else "❌ Выключен"
-    await callback.message.edit_text(f"🚫 Антимат\n\nСтатус: {status}\nНаказание: {s['punishment']}\nДлительность: {format_time(s['duration'])}\n\nБлокирует нецензурную лексику", reply_markup=get_profanity_manage_keyboard(s))
+    await callback.message.edit_text(f"🚫 Антимат\n\nСтатус: {'✅ Вкл' if s['enabled'] else '❌ Выкл'}\nНаказание: {s['punishment']}\nДлительность: {format_time(s['duration'])}",
+                                      reply_markup=get_profanity_manage_keyboard(s))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_profanity_filter")
@@ -2555,7 +2549,7 @@ async def toggle_profanity_filter(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_profanity_filter_settings(chat_id)
     db.set_profanity_filter_settings(chat_id, not s['enabled'], s['punishment'], s['duration'])
@@ -2566,7 +2560,7 @@ async def toggle_profanity_filter(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_profanity_punishment(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Выберите наказание за мат:", reply_markup=get_punishment_keyboard("profanity"))
+    await callback.message.edit_text("Выберите наказание:", reply_markup=get_punishment_keyboard("profanity"))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_profanity_duration")
@@ -2581,7 +2575,7 @@ async def set_profanity_duration(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def profanity_filter_info(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("ℹ️ Что такое антимат?\n\nБот автоматически обнаруживает и блокирует сообщения, содержащие нецензурную лексику.\n\nПри обнаружении мата применяется наказание:\n• Warn - предупреждение\n• Mute - ограничение на отправку сообщений\n• Kick - удаление из чата\n• Ban - блокировка в чате", reply_markup=get_back_keyboard("profanity_manage"))
+    await callback.message.edit_text("ℹ️ Антимат блокирует нецензурную лексику", reply_markup=get_back_keyboard("profanity_manage"))
     await callback.answer()
 
 @dp.callback_query(F.data == "raid_manage")
@@ -2591,11 +2585,11 @@ async def raid_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_raid_protection_settings(chat_id)
-    status = "✅ Включена" if s['enabled'] else "❌ Выключена"
-    await callback.message.edit_text(f"🛡️ Рейд-защита\n\nСтатус: {status}\nЛимит вступлений: {s['limit']}\nПериод: {s['window']} сек\nНаказание: {s['punishment']}\nДлительность: {format_time(s['duration'])}\n\nАвтоматически блокирует массовые вступления в чат", reply_markup=get_raid_manage_keyboard(s))
+    await callback.message.edit_text(f"🛡️ Рейд-защита\n\nСтатус: {'✅ Вкл' if s['enabled'] else '❌ Выкл'}\nЛимит: {s['limit']} за {s['window']} сек\nНаказание: {s['punishment']}\nДлительность: {format_time(s['duration'])}",
+                                      reply_markup=get_raid_manage_keyboard(s))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_raid_protection")
@@ -2605,7 +2599,7 @@ async def toggle_raid_protection(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_raid_protection_settings(chat_id)
     db.set_raid_protection_settings(chat_id, not s['enabled'], s['limit'], s['window'], s['punishment'], s['duration'])
@@ -2632,7 +2626,7 @@ async def set_raid_window(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_raid_punishment(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Выберите наказание для рейдеров:", reply_markup=get_punishment_keyboard("raid"))
+    await callback.message.edit_text("Выберите наказание:", reply_markup=get_punishment_keyboard("raid"))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_raid_duration")
@@ -2647,7 +2641,7 @@ async def set_raid_duration(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def raid_protection_info(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("ℹ️ Что такое рейд-защита?\n\nФункция автоматически обнаруживает массовые вступления пользователей в чат.\n\nЕсли за указанный период вступает больше пользователей, чем лимит:\n• Все новые участники получают наказание\n• В чат отправляется предупреждение\n\nЭто защищает от рейд-атак и спам-ботов.", reply_markup=get_back_keyboard("raid_manage"))
+    await callback.message.edit_text("ℹ️ Рейд-защита блокирует массовые вступления", reply_markup=get_back_keyboard("raid_manage"))
     await callback.answer()
 
 @dp.callback_query(F.data == "auto_comment_manage")
@@ -2657,12 +2651,12 @@ async def auto_comment_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_auto_comment_settings(chat_id)
     text_preview = s['text'][:50] + "..." if s['text'] and len(s['text']) > 50 else s['text'] or "не установлен"
-    status = "✅ Включен" if s['enabled'] else "❌ Выключен"
-    await callback.message.edit_text(f"💬 Авто-комментарий к постам\n\nСтатус: {status}\nТекст: {text_preview}\nМедиа: {'✅ есть' if s['media_id'] else '❌ нет'}\n\nБот будет автоматически писать этот комментарий под каждым новым постом канала в обсуждении", reply_markup=get_auto_comment_keyboard(s))
+    await callback.message.edit_text(f"💬 Авто-комментарий\n\nСтатус: {'✅ Вкл' if s['enabled'] else '❌ Выкл'}\nТекст: {text_preview}\nМедиа: {'✅' if s['media_id'] else '❌'}",
+                                      reply_markup=get_auto_comment_keyboard(s))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_auto_comment")
@@ -2672,7 +2666,7 @@ async def toggle_auto_comment(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_auto_comment_settings(chat_id)
     db.set_auto_comment_settings(chat_id, not s['enabled'], s['text'], s['media_id'], s['media_type'])
@@ -2683,7 +2677,7 @@ async def toggle_auto_comment(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_auto_comment_text(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("📝 Отправьте текст для авто-комментария:\n\nМожно использовать:\n• {post_link} - ссылка на пост\n• {channel_title} - название канала", reply_markup=get_back_keyboard("auto_comment_manage"))
+    await callback.message.edit_text("📝 Отправьте текст для авто-комментария.\nДоступно: {post_link}, {channel_title}", reply_markup=get_back_keyboard("auto_comment_manage"))
     await state.set_state(AutoCommentStates.waiting_for_text)
     await callback.answer()
 
@@ -2691,7 +2685,7 @@ async def set_auto_comment_text(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_auto_comment_media(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("🖼 Отправьте медиа для авто-комментария:\n\nПоддерживается: фото, видео, GIF, стикер", reply_markup=get_back_keyboard("auto_comment_manage"))
+    await callback.message.edit_text("🖼 Отправьте медиа (фото, видео, GIF, стикер)", reply_markup=get_back_keyboard("auto_comment_manage"))
     await state.set_state(AutoCommentStates.waiting_for_media)
     await callback.answer()
 
@@ -2702,7 +2696,7 @@ async def view_auto_comment(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_auto_comment_settings(chat_id)
     if s['media_id']:
@@ -2722,7 +2716,7 @@ async def view_auto_comment(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def auto_comment_info(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("ℹ️ Что такое авто-комментарий?\n\nФункция автоматически публикует комментарий под каждым новым постом канала.\n\nДля работы необходимо:\n1️⃣ Канал должен быть привязан к супергруппе как обсуждение\n2️⃣ Бот должен быть администратором в супергруппе\n\nПоддерживаются переменные:\n• {post_link} - ссылка на пост\n• {channel_title} - название канала", reply_markup=get_back_keyboard("auto_comment_manage"))
+    await callback.message.edit_text("ℹ️ Авто-комментарий пишет под каждым новым постом канала в обсуждении", reply_markup=get_back_keyboard("auto_comment_manage"))
     await callback.answer()
 
 @dp.callback_query(F.data == "auto_response_manage")
@@ -2732,18 +2726,16 @@ async def auto_response_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     resp = db.get_auto_responses(chat_id)
     if not resp:
-        text = "🤖 Автоответчик\n\nСписок триггеров пуст.\nМаксимум: 100 триггеров"
+        text = "🤖 Автоответчик\n\nСписок пуст"
     else:
-        text = f"🤖 Автоответчик ({len(resp)}/100)\n\n"
+        text = f"🤖 Автоответчик ({len(resp)}/{MAX_TRIGGERS})\n\n"
         for t, r, rt, _ in resp:
-            short_r = r[:30] + "..." if len(r) > 30 else r
-            type_emoji = "📝" if rt == 'text' else "🖼" if rt == 'photo' else "🎬" if rt in ['video', 'animation'] else "🎯" if rt == 'sticker' else "🎤" if rt == 'voice' else "📄" if rt == 'document' else "❓"
-            text += f"• {type_emoji} <code>{t}</code> → {short_r}\n"
-    await callback.message.edit_text(text, reply_markup=get_auto_response_keyboard(resp), parse_mode="HTML")
+            text += f"• {t} → {r[:30]}...\n"
+    await callback.message.edit_text(text, reply_markup=get_auto_response_keyboard(resp))
     await callback.answer()
 
 @dp.callback_query(F.data == "add_auto_trigger")
@@ -2753,13 +2745,13 @@ async def add_auto_trigger(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     resp = db.get_auto_responses(chat_id)
     if len(resp) >= MAX_TRIGGERS:
-        await callback.answer(f"❌ Достигнут лимит триггеров ({MAX_TRIGGERS})!", show_alert=True)
+        await callback.answer(f"❌ Лимит {MAX_TRIGGERS}!", show_alert=True)
         return
-    await callback.message.edit_text(f"📝 Введите ключевое слово (триггер).\nМакс. длина: {MAX_TRIGGER_LENGTH} символов\nМакс. слов: {MAX_TRIGGER_WORDS}\n\nТриггер будет проверяться на точное совпадение и вхождение в текст.", reply_markup=get_back_keyboard("auto_response_manage"))
+    await callback.message.edit_text(f"📝 Введите ключевое слово (триггер).\nМакс: {MAX_TRIGGER_LENGTH} символов, {MAX_TRIGGER_WORDS} слово", reply_markup=get_back_keyboard("auto_response_manage"))
     await state.set_state(AutoResponseStates.waiting_for_trigger)
     await callback.answer()
 
@@ -2774,13 +2766,13 @@ async def process_auto_trigger(message: Message, state: FSMContext):
         await message.answer("❌ Триггер не может быть пустым!")
         return
     if len(trigger) > MAX_TRIGGER_LENGTH:
-        await message.answer(f"❌ Триггер слишком длинный! Максимум {MAX_TRIGGER_LENGTH} символов")
+        await message.answer(f"❌ Максимум {MAX_TRIGGER_LENGTH} символов!")
         return
     if len(trigger.split()) > MAX_TRIGGER_WORDS:
-        await message.answer(f"❌ Триггер должен содержать максимум {MAX_TRIGGER_WORDS} слово")
+        await message.answer(f"❌ Максимум {MAX_TRIGGER_WORDS} слово!")
         return
     await state.update_data(auto_trigger=trigger)
-    await message.answer(f"📝 Введите ответ для триггера '{trigger}'.\nМакс. длина: {MAX_RESPONSE_LENGTH} символов\n\nВы можете отправить:\n• Текст с форматированием\n• Фото с подписью\n• Видео с подписью\n• GIF с подписью\n• Стикер\n• Голосовое сообщение\n• Видео-кружок\n• Документ с подписью", reply_markup=get_back_keyboard("auto_response_manage"))
+    await message.answer(f"📝 Введите ответ для триггера '{trigger}'.\nМакс: {MAX_RESPONSE_LENGTH} символов\n\nПоддерживается: текст, фото, видео, GIF, стикер, голосовое, документ", reply_markup=get_back_keyboard("auto_response_manage"))
     await state.set_state(AutoResponseStates.waiting_for_response)
 
 @dp.message(AutoResponseStates.waiting_for_response)
@@ -2793,7 +2785,7 @@ async def process_auto_response(message: Message, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     trigger = data.get('auto_trigger')
     if not chat_id or not trigger:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     rtype = 'text'
@@ -2817,15 +2809,12 @@ async def process_auto_response(message: Message, state: FSMContext):
     elif message.sticker:
         rtype = 'sticker'
         media = message.sticker.file_id
-        resp = ""
     elif message.voice:
         rtype = 'voice'
         media = message.voice.file_id
-        resp = ""
     elif message.video_note:
         rtype = 'video_note'
         media = message.video_note.file_id
-        resp = ""
     elif message.document:
         rtype = 'document'
         media = message.document.file_id
@@ -2834,7 +2823,7 @@ async def process_auto_response(message: Message, state: FSMContext):
         await message.answer("❌ Ответ не может быть пустым!")
         return
     if len(resp) > MAX_RESPONSE_LENGTH:
-        await message.answer(f"❌ Ответ слишком длинный! Максимум {MAX_RESPONSE_LENGTH} символов")
+        await message.answer(f"❌ Максимум {MAX_RESPONSE_LENGTH} символов!")
         return
     success, msg = db.add_auto_response(chat_id, trigger, resp, rtype, media)
     await message.answer(msg)
@@ -2848,13 +2837,13 @@ async def remove_auto_trigger(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     resp = db.get_auto_responses(chat_id)
     if not resp:
-        await callback.answer("❌ Нет триггеров для удаления!", show_alert=True)
+        await callback.answer("❌ Нет триггеров!", show_alert=True)
         return
-    await callback.message.edit_text("🗑 Выберите триггер для удаления:", reply_markup=get_auto_response_remove_keyboard(resp))
+    await callback.message.edit_text("🗑 Выберите триггер:", reply_markup=get_auto_response_remove_keyboard(resp))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("rem_trig_"))
@@ -2865,7 +2854,7 @@ async def process_remove_trigger(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     resp = db.get_auto_responses(chat_id)
     if idx < 0 or idx >= len(resp):
@@ -2883,18 +2872,10 @@ async def log_group_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     info = db.get_source_chat_log_group(chat_id)
-    has = info is not None
-    await callback.message.edit_text("📋 Группа логов\n\nСюда будут отправляться логи нарушений, действий модераторов и другие события.", reply_markup=get_log_group_manage_keyboard(has, info))
-    await callback.answer()
-
-@dp.callback_query(F.data == "log_group_help")
-@edit_only()
-@check_owner()
-async def log_group_help(callback: CallbackQuery):
-    await callback.message.edit_text("📋 Как создать группу логов:\n\n1️⃣ Создайте новую группу в Telegram (обычную, не привязанную к каналу)\n2️⃣ Добавьте бота в эту группу\n3️⃣ Выдайте боту права администратора\n4️⃣ В этой группе напишите команду /loggroup\n5️⃣ Нажмите «Запомнить»\n\nПосле этого группа будет сохранена и появится в списке групп логов в настройках.", reply_markup=get_back_keyboard("log_group_manage"))
+    await callback.message.edit_text("📋 Группа логов", reply_markup=get_log_group_manage_keyboard(info is not None, info))
     await callback.answer()
 
 @dp.callback_query(F.data == "link_log_group")
@@ -2904,7 +2885,7 @@ async def link_log_group(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     groups = db.get_user_log_groups(user_id)
     if not groups:
-        await callback.message.edit_text("❌ У вас ещё нет созданных групп логов!\n\nСоздайте группу логов, следуя инструкции.", reply_markup=get_back_keyboard("log_group_manage"))
+        await callback.message.edit_text("❌ Нет групп логов!", reply_markup=get_back_keyboard("log_group_manage"))
         await callback.answer()
         return
     builder = InlineKeyboardBuilder()
@@ -2912,7 +2893,7 @@ async def link_log_group(callback: CallbackQuery, state: FSMContext):
         builder.add(create_button(title or f"Группа {gid}", f"select_log_group_{gid}"))
     builder.add(create_button("◀ Назад", "log_group_manage"))
     builder.adjust(1)
-    await callback.message.edit_text("📋 Выберите группу логов\n\nВ эту группу будут отправляться события из текущего чата:", reply_markup=builder.as_markup())
+    await callback.message.edit_text("📋 Выберите группу логов:", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("select_log_group_"))
@@ -2923,7 +2904,7 @@ async def select_log_group(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     db.set_source_chat_log_group(chat_id, gid)
     await callback.answer("✅ Группа логов привязана!")
@@ -2937,7 +2918,7 @@ async def log_group_settings(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     info = db.get_source_chat_log_group(chat_id)
     if not info:
-        await callback.answer("❌ Группа логов не привязана!", show_alert=True)
+        await callback.answer("❌ Нет группы логов!", show_alert=True)
         return
     settings = {
         'send_violations': info['send_violations'],
@@ -2946,7 +2927,7 @@ async def log_group_settings(callback: CallbackQuery, state: FSMContext):
         'send_leaves': info['send_leaves'],
         'send_messages': info['send_messages']
     }
-    await callback.message.edit_text(f"📋 Настройки отправки в лог-группу\n\nГруппа: {info['group_title']}\nID: <code>{info['log_group_id']}</code>\n\nВыберите, какие события отправлять:", reply_markup=get_log_settings_keyboard(settings), parse_mode="HTML")
+    await callback.message.edit_text(f"📋 Настройки логов\nГруппа: {info['group_title']}", reply_markup=get_log_settings_keyboard(settings))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_log_violations")
@@ -2959,7 +2940,7 @@ async def toggle_log_violations(callback: CallbackQuery, state: FSMContext):
     if info:
         new = 0 if info['send_violations'] else 1
         db.update_log_group_settings(chat_id, info['log_group_id'], send_violations=new)
-        await callback.answer("✅ Настройки обновлены!")
+        await callback.answer("✅ Обновлено!")
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_mod")
@@ -2972,7 +2953,7 @@ async def toggle_log_mod(callback: CallbackQuery, state: FSMContext):
     if info:
         new = 0 if info['send_mod_actions'] else 1
         db.update_log_group_settings(chat_id, info['log_group_id'], send_mod_actions=new)
-        await callback.answer("✅ Настройки обновлены!")
+        await callback.answer("✅ Обновлено!")
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_joins")
@@ -2985,7 +2966,7 @@ async def toggle_log_joins(callback: CallbackQuery, state: FSMContext):
     if info:
         new = 0 if info['send_joins'] else 1
         db.update_log_group_settings(chat_id, info['log_group_id'], send_joins=new)
-        await callback.answer("✅ Настройки обновлены!")
+        await callback.answer("✅ Обновлено!")
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_leaves")
@@ -2998,7 +2979,7 @@ async def toggle_log_leaves(callback: CallbackQuery, state: FSMContext):
     if info:
         new = 0 if info['send_leaves'] else 1
         db.update_log_group_settings(chat_id, info['log_group_id'], send_leaves=new)
-        await callback.answer("✅ Настройки обновлены!")
+        await callback.answer("✅ Обновлено!")
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "toggle_log_messages")
@@ -3011,7 +2992,7 @@ async def toggle_log_messages(callback: CallbackQuery, state: FSMContext):
     if info:
         new = 0 if info['send_messages'] else 1
         db.update_log_group_settings(chat_id, info['log_group_id'], send_messages=new)
-        await callback.answer("✅ Настройки обновлены!")
+        await callback.answer("✅ Обновлено!")
     await log_group_settings(callback, state)
 
 @dp.callback_query(F.data == "log_group_info")
@@ -3022,9 +3003,9 @@ async def log_group_info(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     info = db.get_source_chat_log_group(chat_id)
     if not info:
-        await callback.answer("❌ Группа логов не привязана!", show_alert=True)
+        await callback.answer("❌ Нет группы логов!", show_alert=True)
         return
-    await callback.message.edit_text(f"📋 Информация о группе логов\n\nГруппа: {info['group_title']}\nID: <code>{info['log_group_id']}</code>", reply_markup=get_back_keyboard("log_group_manage"), parse_mode="HTML")
+    await callback.message.edit_text(f"📋 Информация\nГруппа: {info['group_title']}\nID: {info['log_group_id']}", reply_markup=get_back_keyboard("log_group_manage"))
     await callback.answer()
 
 @dp.callback_query(F.data == "unlink_log_group")
@@ -3044,17 +3025,17 @@ async def moderators_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     mods = db.get_all_moderators(chat_id)
-    await callback.message.edit_text("🛡️ Управление модераторами\n\nЗдесь вы можете назначать и забирать права модераторов.", reply_markup=get_moderators_manage_keyboard(mods))
+    await callback.message.edit_text("🛡️ Управление модераторами", reply_markup=get_moderators_manage_keyboard(mods))
     await callback.answer()
 
 @dp.callback_query(F.data == "give_mod_rights")
 @edit_only()
 @check_owner()
 async def give_mod_rights(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("👤 Ответьте на сообщение пользователя, которому хотите дать права модератора,\nили отправьте его ID / username.")
+    await callback.message.edit_text("👤 Ответьте на сообщение пользователя или отправьте ID/username")
     await state.set_state(ModerationStates.waiting_for_give_mute_user)
     await callback.answer()
 
@@ -3063,7 +3044,7 @@ async def process_give_mod_user(message: Message, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     target_id = None
@@ -3076,13 +3057,13 @@ async def process_give_mod_user(message: Message, state: FSMContext):
             m = await bot.get_chat_member(chat_id, message.text)
             target_id = m.user.id
         except:
-            await message.answer("❌ Пользователь не найден в этом чате!")
+            await message.answer("❌ Пользователь не найден!")
             return
     if not target_id:
         await message.answer("❌ Не удалось определить пользователя!")
         return
     await state.update_data(target_mod_id=target_id)
-    await message.answer("Выберите права для пользователя:", reply_markup=get_mod_rights_keyboard(target_id))
+    await message.answer("Выберите права:", reply_markup=get_mod_rights_keyboard(target_id))
 
 @dp.callback_query(F.data.startswith("give_mute_"))
 @edit_only()
@@ -3093,7 +3074,7 @@ async def give_mute_right(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     db.set_moderator_permission(chat_id, target_id, 'can_mute', True, callback.from_user.id)
     await callback.answer("✅ Право мутить выдано!")
-    await callback.message.edit_text("✅ Право успешно выдано!")
+    await callback.message.edit_text("✅ Готово!")
 
 @dp.callback_query(F.data.startswith("give_kick_"))
 @edit_only()
@@ -3104,7 +3085,7 @@ async def give_kick_right(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     db.set_moderator_permission(chat_id, target_id, 'can_kick', True, callback.from_user.id)
     await callback.answer("✅ Право кикать выдано!")
-    await callback.message.edit_text("✅ Право успешно выдано!")
+    await callback.message.edit_text("✅ Готово!")
 
 @dp.callback_query(F.data.startswith("give_ban_"))
 @edit_only()
@@ -3115,7 +3096,7 @@ async def give_ban_right(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     db.set_moderator_permission(chat_id, target_id, 'can_ban', True, callback.from_user.id)
     await callback.answer("✅ Право банить выдано!")
-    await callback.message.edit_text("✅ Право успешно выдано!")
+    await callback.message.edit_text("✅ Готово!")
 
 @dp.callback_query(F.data.startswith("give_warn_"))
 @edit_only()
@@ -3126,7 +3107,7 @@ async def give_warn_right(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     db.set_moderator_permission(chat_id, target_id, 'can_warn', True, callback.from_user.id)
     await callback.answer("✅ Право варнить выдано!")
-    await callback.message.edit_text("✅ Право успешно выдано!")
+    await callback.message.edit_text("✅ Готово!")
 
 @dp.callback_query(F.data == "list_moderators")
 @edit_only()
@@ -3136,10 +3117,10 @@ async def list_moderators(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     mods = db.get_all_moderators(chat_id)
     if not mods:
-        await callback.message.edit_text("📋 Нет назначенных модераторов", reply_markup=get_back_keyboard("moderators_manage"))
+        await callback.message.edit_text("📋 Нет модераторов", reply_markup=get_back_keyboard("moderators_manage"))
         await callback.answer()
         return
-    text = "🛡️ Список модераторов:\n\n"
+    text = "🛡️ Модераторы:\n\n"
     for m in mods:
         try:
             u = await bot.get_chat_member(chat_id, m[0])
@@ -3148,7 +3129,7 @@ async def list_moderators(callback: CallbackQuery, state: FSMContext):
             if m[2]: rights.append("👢 кик")
             if m[3]: rights.append("⛔ бан")
             if m[4]: rights.append("⚠️ варн")
-            text += f"• <b>{u.user.full_name}</b>\n  Права: {', '.join(rights) if rights else 'нет прав'}\n\n"
+            text += f"• {u.user.full_name}\n  Права: {', '.join(rights) or 'нет'}\n\n"
         except:
             continue
     await callback.message.edit_text(text, reply_markup=get_back_keyboard("moderators_manage"), parse_mode="HTML")
@@ -3161,46 +3142,41 @@ async def manage_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     has = db.get_rules_html(chat_id) is not None
     enabled = db.get_rules_enabled(chat_id)
-    status = "✅ Включены" if enabled else "❌ Выключены"
-    await callback.message.edit_text(f"📝 Управление правилами\n\nСтатус: {status}", reply_markup=get_rules_manage_keyboard(has, enabled))
+    await callback.message.edit_text(f"📝 Правила\nСтатус: {'✅ Вкл' if enabled else '❌ Выкл'}", reply_markup=get_rules_manage_keyboard(has, enabled))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_rules")
 @edit_only()
 @check_owner()
 async def set_rules(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("📝 Отправьте текст правил для этой группы.\n\nВы можете использовать форматирование:\n• <b>Жирный</b> - &lt;b&gt;текст&lt;/b&gt;\n• <i>Курсив</i> - &lt;i&gt;текст&lt;/i&gt;\n• <u>Подчеркнутый</u> - &lt;u&gt;текст&lt;/u&gt;\n• <s>Зачеркнутый</s> - &lt;s&gt;текст&lt;/s&gt;\n• <tg-spoiler>Спойлер</tg-spoiler> - &lt;tg-spoiler&gt;текст&lt;/tg-spoiler&gt;\n• <blockquote>Цитата</blockquote> - &lt;blockquote&gt;текст&lt;/blockquote&gt;\n• <blockquote expandable>Свернутая цитата</blockquote> - &lt;blockquote expandable&gt;текст&lt;/blockquote&gt;\n• <code>Код</code> - &lt;code&gt;текст&lt;/code&gt;\n• <pre>Блок кода</pre> - &lt;pre&gt;текст&lt;/pre&gt;", reply_markup=get_back_keyboard("manage_rules"))
+    await callback.message.edit_text("📝 Отправьте текст правил.\nМакс: 10000 символов\nПоддерживается HTML", reply_markup=get_back_keyboard("manage_rules"))
     await state.set_state(RulesStates.waiting_for_rules_text)
     await callback.answer()
 
 @dp.message(RulesStates.waiting_for_rules_text)
 async def process_rules_text(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    rules_html = message.html_text.strip()
-    if not rules_html or len(rules_html) < 10:
-        await message.answer("❌ Правила слишком короткие!")
+    text = message.html_text.strip()
+    if len(text) > 10000:
+        await message.answer("❌ Слишком длинные правила!")
         return
-    if len(rules_html) > 10000:
-        await message.answer("❌ Правила слишком длинные! Максимум 10000 символов")
+    if len(text) < 10:
+        await message.answer("❌ Слишком короткие правила!")
         return
-    db.save_rules(chat_id, rules_html=rules_html)
+    db.save_rules(chat_id, rules_html=text)
     db.set_rules_enabled(chat_id, True)
     await message.reply("✅ Правила сохранены!")
     await add_premium_reaction(message, "✅")
@@ -3213,33 +3189,10 @@ async def set_default_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
-    default_rules = """<b>📜 Правила чата</b>
-
-<b>1. Уважение</b>
-• Запрещены оскорбления участников и администрации
-• Запрещены любые формы дискриминации
-• Наказание: предупреждение или мут 1-24 часа
-
-<b>2. Контент</b>
-• Запрещена реклама без разрешения администрации
-• Запрещены ссылки на сторонние ресурсы
-• Запрещен спам и флуд (более 5 сообщений подряд)
-• Наказание: предупреждение или мут 1-24 часа
-
-<b>3. Безопасность</b>
-• Запрещены угрозы и призывы к насилию
-• Запрещены мошеннические действия
-• Наказание: бан 7-30 дней
-
-<b>4. Администрация</b>
-• Решения администрации окончательны
-• Вопросы по наказаниям решаются в ЛС
-• Обжалование: @support_puls
-
-Незнание правил не освобождает от ответственности!"""
-    db.save_rules(chat_id, rules_html=default_rules)
+    default = "<b>📜 Правила чата</b>\n\n<b>1. Уважение</b>\n• Запрещены оскорбления\n<b>2. Контент</b>\n• Запрещена реклама\n<b>3. Безопасность</b>\n• Запрещены угрозы"
+    db.save_rules(chat_id, rules_html=default)
     db.set_rules_enabled(chat_id, True)
     await callback.answer("✅ Готовые правила установлены!")
     await manage_rules(callback, state)
@@ -3252,43 +3205,36 @@ async def show_rules(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     rules = db.get_rules_html(chat_id)
     if rules:
-        await callback.message.edit_text(f"📜 Текущие правила:\n\n{rules}", reply_markup=get_back_keyboard("manage_rules"), parse_mode="HTML")
+        await callback.message.edit_text(f"📜 Правила:\n\n{safe_html(rules, True)}", reply_markup=get_back_keyboard("manage_rules"), parse_mode="HTML")
     else:
-        await callback.message.edit_text("❌ Правила ещё не установлены", reply_markup=get_back_keyboard("manage_rules"))
+        await callback.message.edit_text("❌ Правила не установлены", reply_markup=get_back_keyboard("manage_rules"))
     await callback.answer()
 
 @dp.callback_query(F.data == "edit_rules")
 @edit_only()
 @check_owner()
 async def edit_rules(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("📝 Отправьте новый текст правил:", reply_markup=get_back_keyboard("manage_rules"))
+    await callback.message.edit_text("📝 Отправьте новый текст правил", reply_markup=get_back_keyboard("manage_rules"))
     await state.set_state(RulesStates.waiting_for_new_rules_text)
     await callback.answer()
 
 @dp.message(RulesStates.waiting_for_new_rules_text)
-async def process_edit_rules_text(message: Message, state: FSMContext):
+async def process_edit_rules(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    rules_html = message.html_text.strip()
-    if not rules_html or len(rules_html) < 10:
-        await message.answer("❌ Правила слишком короткие!")
+    text = message.html_text.strip()
+    if len(text) > 10000:
+        await message.answer("❌ Слишком длинные правила!")
         return
-    if len(rules_html) > 10000:
-        await message.answer("❌ Правила слишком длинные! Максимум 10000 символов")
-        return
-    db.save_rules(chat_id, rules_html=rules_html)
+    db.save_rules(chat_id, rules_html=text)
     await message.reply("✅ Правила обновлены!")
     await add_premium_reaction(message, "✅")
     await state.clear()
@@ -3297,16 +3243,11 @@ async def process_edit_rules_text(message: Message, state: FSMContext):
 @edit_only()
 @check_owner()
 async def delete_rules_confirm(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Да, удалить", "delete_rules", "danger"))
-    builder.add(create_button("🚫 Нет", "manage_rules", "secondary"))
+    builder.add(create_button("✅ Да, удалить", "delete_rules"))
+    builder.add(create_button("🚫 Нет", "manage_rules"))
     builder.adjust(2)
-    await callback.message.edit_text("❓ Вы уверены, что хотите удалить правила?", reply_markup=builder.as_markup())
+    await callback.message.edit_text("❓ Удалить правила?", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data == "delete_rules")
@@ -3325,9 +3266,9 @@ async def delete_rules(callback: CallbackQuery, state: FSMContext):
 async def toggle_rules(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    current = db.get_rules_enabled(chat_id)
-    db.set_rules_enabled(chat_id, not current)
-    await callback.answer(f"✅ Правила {'включены' if not current else 'выключены'}!")
+    cur = db.get_rules_enabled(chat_id)
+    db.set_rules_enabled(chat_id, not cur)
+    await callback.answer(f"✅ Правила {'включены' if not cur else 'выключены'}!")
     await manage_rules(callback, state)
 
 @dp.callback_query(F.data == "manage_welcome")
@@ -3337,10 +3278,10 @@ async def manage_welcome(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     enabled = db.get_welcome_enabled(chat_id)
-    await callback.message.edit_text("👋 Управление приветствием\n\nНастройте приветствие для новых участников.", reply_markup=get_welcome_manage_keyboard(enabled))
+    await callback.message.edit_text("👋 Приветствие", reply_markup=get_welcome_manage_keyboard(enabled))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_welcome")
@@ -3349,43 +3290,36 @@ async def manage_welcome(callback: CallbackQuery, state: FSMContext):
 async def toggle_welcome(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    current = db.get_welcome_enabled(chat_id)
-    db.set_welcome_enabled(chat_id, not current)
-    await callback.answer(f"✅ Приветствие {'включено' if not current else 'выключено'}!")
+    cur = db.get_welcome_enabled(chat_id)
+    db.set_welcome_enabled(chat_id, not cur)
+    await callback.answer(f"✅ Приветствие {'включено' if not cur else 'выключено'}!")
     await manage_welcome(callback, state)
 
 @dp.callback_query(F.data == "set_welcome_text")
 @edit_only()
 @check_owner()
 async def set_welcome_text(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("📝 Отправьте текст приветствия.\n\nМожно использовать:\n• {name} - имя\n• {username} - юзернейм\n• {chat} - название группы\n\nПример: Добро пожаловать, {name}!", reply_markup=get_back_keyboard("manage_welcome"))
+    await callback.message.edit_text("📝 Отправьте текст приветствия.\nДоступно: {name}, {username}, {chat}\nМакс: 4000 символов", reply_markup=get_back_keyboard("manage_welcome"))
     await state.set_state(WelcomeStates.waiting_for_welcome_text)
     await callback.answer()
 
 @dp.message(WelcomeStates.waiting_for_welcome_text)
 async def process_welcome_text(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    welcome_text = message.html_text.strip()
-    if not welcome_text:
-        await message.answer("❌ Текст не может быть пустым!")
+    text = message.html_text.strip()
+    if len(text) > 4000:
+        await message.answer("❌ Слишком длинный текст!")
         return
-    if len(welcome_text) > 4000:
-        await message.answer("❌ Текст слишком длинный! Максимум 4000 символов")
-        return
-    db.save_welcome(chat_id, welcome_text=welcome_text)
+    db.save_welcome(chat_id, welcome_text=text)
     await message.reply("✅ Текст приветствия сохранён!")
     await add_premium_reaction(message, "✅")
     await state.clear()
@@ -3394,35 +3328,31 @@ async def process_welcome_text(message: Message, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_welcome_photo(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("🖼 Отправьте фото для приветствия.\n\nОно будет отправляться вместе с текстом.", reply_markup=get_back_keyboard("manage_welcome"))
+    await callback.message.edit_text("🖼 Отправьте фото для приветствия", reply_markup=get_back_keyboard("manage_welcome"))
     await state.set_state(WelcomeStates.waiting_for_welcome_photo)
     await callback.answer()
 
 @dp.message(WelcomeStates.waiting_for_welcome_photo, F.photo)
 async def process_welcome_photo(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    photo_id = message.photo[-1].file_id
-    db.save_welcome(chat_id, welcome_photo_id=photo_id)
+    photo = message.photo[-1].file_id
+    db.save_welcome(chat_id, welcome_photo_id=photo)
     await message.reply("✅ Фото сохранено!")
     await add_premium_reaction(message, "✅")
     await state.clear()
 
 @dp.message(WelcomeStates.waiting_for_welcome_photo)
 async def process_welcome_photo_invalid(message: Message, state: FSMContext):
-    await message.answer("❌ Пожалуйста, отправьте фото!")
+    await message.answer("❌ Отправьте фото!")
 
 @dp.callback_query(F.data == "show_welcome")
 @edit_only()
@@ -3432,14 +3362,14 @@ async def show_welcome(callback: CallbackQuery, state: FSMContext):
     chat_id = data.get('selected_chat_id')
     text, photo = db.get_welcome(chat_id)
     if not text and not photo:
-        await callback.message.edit_text("❌ Приветствие ещё не настроено", reply_markup=get_back_keyboard("manage_welcome"))
+        await callback.message.edit_text("❌ Приветствие не настроено", reply_markup=get_back_keyboard("manage_welcome"))
         await callback.answer()
         return
     await callback.message.delete()
     if photo:
-        await callback.message.answer_photo(photo, caption=f"👋 Текущее приветствие:\n\n{text}" if text else None, reply_markup=get_back_keyboard("manage_welcome"), parse_mode="HTML")
+        await callback.message.answer_photo(photo, caption=text or "Приветствие", reply_markup=get_back_keyboard("manage_welcome"), parse_mode="HTML")
     else:
-        await callback.message.answer(f"👋 Текущее приветствие:\n\n{text}", reply_markup=get_back_keyboard("manage_welcome"), parse_mode="HTML")
+        await callback.message.answer(text, reply_markup=get_back_keyboard("manage_welcome"), parse_mode="HTML")
     await callback.answer()
 
 @dp.callback_query(F.data == "rules_auto")
@@ -3449,11 +3379,10 @@ async def rules_auto(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     enabled, interval = db.get_rules_auto_settings(chat_id)
-    status = "✅ Включена" if enabled else "❌ Выключена"
-    await callback.message.edit_text(f"🔄 Авто-рассылка правил\n\nСтатус: {status}\nИнтервал: {format_interval(interval)}", reply_markup=get_rules_auto_keyboard(enabled))
+    await callback.message.edit_text(f"🔄 Авто-рассылка\nСтатус: {'✅ Вкл' if enabled else '❌ Выкл'}\nИнтервал: {format_interval(interval)}", reply_markup=get_rules_auto_keyboard(enabled))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_rules_auto")
@@ -3471,38 +3400,34 @@ async def toggle_rules_auto(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_interval(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("⏱ Введите интервал в минутах (от 5 до 525600):", reply_markup=get_back_keyboard("rules_auto"))
+    await callback.message.edit_text("⏱ Введите интервал в минутах (5-525600):", reply_markup=get_back_keyboard("rules_auto"))
     await state.set_state(RulesStates.waiting_for_interval)
     await callback.answer()
 
 @dp.message(RulesStates.waiting_for_interval)
 async def process_interval(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        interval = int(message.text)
-        if interval < 5 or interval > 525600:
-            await message.answer("❌ Интервал должен быть от 5 до 525600 минут!")
+        val = int(message.text)
+        if val < 5 or val > 525600:
+            await message.answer("❌ От 5 до 525600 минут!")
             return
         enabled, _ = db.get_rules_auto_settings(chat_id)
-        db.set_rules_auto_settings(chat_id, enabled, interval * 60)
-        await message.reply(f"✅ Интервал установлен: {format_interval(interval * 60)}")
+        db.set_rules_auto_settings(chat_id, enabled, val * 60)
+        await message.reply(f"✅ Интервал: {format_interval(val * 60)}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
-        await message.answer("❌ Пожалуйста, введите число!")
+    except:
+        await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "antiflood_manage")
 @edit_only()
@@ -3511,11 +3436,10 @@ async def antiflood_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     s = db.get_antiflood_settings(chat_id)
-    status = "✅ Включён" if s['enabled'] else "❌ Выключен"
-    await callback.message.edit_text(f"🚫 Антифлуд\n\nСтатус: {status}\n• Текст: {s['msg_limit']} сообщ.\n• Медиа: {s['media_limit']} сообщ.\n• Период: {s['time_window']} сек\n• Предупреждений: {s['warn_count']}\n• Первое: {s['first_punish']} ({format_time(s['first_duration'])})\n• Повторное: {s['repeat_punish']} ({format_time(s['repeat_duration'])})\n• После варнов: {s['punish_after_warn']} ({format_time(s['punish_after_warn_duration'])})\n\nУмный антифлуд отличает текстовые и медиа-сообщения.", reply_markup=get_antiflood_manage_keyboard(s))
+    await callback.message.edit_text(f"🚫 Антифлуд\nСтатус: {'✅ Вкл' if s['enabled'] else '❌ Выкл'}\nТекст: {s['msg_limit']}\nМедиа: {s['media_limit']}\nПериод: {s['time_window']} сек\nПредупреждений: {s['warn_count']}\nПервое: {s['first_punish']} {format_time(s['first_duration'])}\nПовторное: {s['repeat_punish']} {format_time(s['repeat_duration'])}\nПосле варнов: {s['punish_after_warn']} {format_time(s['punish_after_warn_duration'])}", reply_markup=get_antiflood_manage_keyboard(s))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_antiflood")
@@ -3533,10 +3457,6 @@ async def toggle_antiflood(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def set_msg_limit(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
     await callback.message.edit_text("📊 Введите лимит текстовых сообщений (3-50):", reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(AntiFloodStates.waiting_for_message_limit)
     await callback.answer()
@@ -3544,35 +3464,31 @@ async def set_msg_limit(callback: CallbackQuery, state: FSMContext):
 @dp.message(AntiFloodStates.waiting_for_message_limit)
 async def process_msg_limit(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        limit = int(message.text)
-        if limit < 3 or limit > 50:
-            await message.answer("❌ Лимит должен быть от 3 до 50!")
+        val = int(message.text)
+        if val < 3 or val > 50:
+            await message.answer("❌ От 3 до 50!")
             return
-        db.save_antiflood_settings(chat_id, msg_limit=limit)
-        await message.reply(f"✅ Лимит текстовых сообщений установлен: {limit}")
+        db.save_antiflood_settings(chat_id, msg_limit=val)
+        await message.reply(f"✅ Лимит текста: {val}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_media_limit")
 @edit_only()
 @check_owner()
 async def set_media_limit(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
     await callback.message.edit_text("🎬 Введите лимит медиа-сообщений (2-20):", reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(AntiFloodStates.waiting_for_media_limit)
     await callback.answer()
@@ -3580,35 +3496,31 @@ async def set_media_limit(callback: CallbackQuery, state: FSMContext):
 @dp.message(AntiFloodStates.waiting_for_media_limit)
 async def process_media_limit(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        limit = int(message.text)
-        if limit < 2 or limit > 20:
-            await message.answer("❌ Лимит должен быть от 2 до 20!")
+        val = int(message.text)
+        if val < 2 or val > 20:
+            await message.answer("❌ От 2 до 20!")
             return
-        db.save_antiflood_settings(chat_id, media_limit=limit)
-        await message.reply(f"✅ Лимит медиа установлен: {limit}")
+        db.save_antiflood_settings(chat_id, media_limit=val)
+        await message.reply(f"✅ Лимит медиа: {val}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_window")
 @edit_only()
 @check_owner()
 async def set_window(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
     await callback.message.edit_text("⏱ Введите период в секундах (5-300):", reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(AntiFloodStates.waiting_for_window)
     await callback.answer()
@@ -3616,129 +3528,103 @@ async def set_window(callback: CallbackQuery, state: FSMContext):
 @dp.message(AntiFloodStates.waiting_for_window)
 async def process_window(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        window = int(message.text)
-        if window < 5 or window > 300:
-            await message.answer("❌ Период должен быть от 5 до 300 секунд!")
+        val = int(message.text)
+        if val < 5 or val > 300:
+            await message.answer("❌ От 5 до 300!")
             return
-        db.save_antiflood_settings(chat_id, time_window=window)
-        await message.reply(f"✅ Период установлен: {window} сек")
+        db.save_antiflood_settings(chat_id, time_window=val)
+        await message.reply(f"✅ Период: {val} сек")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_warn_count")
 @edit_only()
 @check_owner()
 async def set_warn_count(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("⚠️ Введите количество предупреждений перед наказанием (1-10):", reply_markup=get_back_keyboard("antiflood_manage"))
+    await callback.message.edit_text("⚠️ Введите количество предупреждений (1-10):", reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(AntiFloodStates.waiting_for_warn_count)
     await callback.answer()
 
 @dp.message(AntiFloodStates.waiting_for_warn_count)
 async def process_warn_count(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        count = int(message.text)
-        if count < 1 or count > 10:
-            await message.answer("❌ Количество предупреждений должно быть от 1 до 10!")
+        val = int(message.text)
+        if val < 1 or val > 10:
+            await message.answer("❌ От 1 до 10!")
             return
-        db.save_antiflood_settings(chat_id, warn_count=count)
-        await message.reply(f"✅ Предупреждений: {count}")
+        db.save_antiflood_settings(chat_id, warn_count=val)
+        await message.reply(f"✅ Предупреждений: {val}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "set_first_punish")
 @edit_only()
 @check_owner()
 async def set_first_punish(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("🔇 Выберите наказание для первого нарушения:", reply_markup=get_punish_type_keyboard("first"))
+    await callback.message.edit_text("🔇 Выберите наказание:", reply_markup=get_punish_type_keyboard("first"))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_repeat_punish")
 @edit_only()
 @check_owner()
 async def set_repeat_punish(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("🔊 Выберите наказание для повторных нарушений:", reply_markup=get_punish_type_keyboard("repeat"))
+    await callback.message.edit_text("🔊 Выберите наказание:", reply_markup=get_punish_type_keyboard("repeat"))
     await callback.answer()
 
 @dp.callback_query(F.data == "set_punish_after_warn")
 @edit_only()
 @check_owner()
 async def set_punish_after_warn(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    if not data.get('selected_chat_id'):
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("⚠️ Выберите наказание после достижения лимита предупреждений:", reply_markup=get_punish_type_keyboard("after"))
+    await callback.message.edit_text("⚠️ Выберите наказание:", reply_markup=get_punish_type_keyboard("after"))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("punish_warn_"))
 @edit_only()
 @check_owner()
 async def punish_warn(callback: CallbackQuery, state: FSMContext):
-    punish_type = callback.data.split('_')[-1]
+    ptype = callback.data.split('_')[-1]
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    if punish_type == "first":
+    if ptype == "first":
         db.save_antiflood_settings(chat_id, first_punish='warn')
-        await callback.answer("✅ Первое наказание: предупреждение", show_alert=True)
-    elif punish_type == "repeat":
+    elif ptype == "repeat":
         db.save_antiflood_settings(chat_id, repeat_punish='warn')
-        await callback.answer("✅ Повторное наказание: предупреждение", show_alert=True)
-    elif punish_type == "after":
+    elif ptype == "after":
         db.save_antiflood_settings(chat_id, punish_after_warn='warn')
-        await callback.answer("✅ Наказание после варнов: предупреждение", show_alert=True)
+    await callback.answer("✅ Наказание: предупреждение")
     await antiflood_manage(callback, state)
 
 @dp.callback_query(F.data.startswith("punish_mute_"))
 @edit_only()
 @check_owner()
 async def punish_mute(callback: CallbackQuery, state: FSMContext):
-    punish_type = callback.data.split('_')[-1]
-    data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("⏱ Введите длительность мута в минутах (0 = навсегда):", reply_markup=get_back_keyboard("antiflood_manage"))
-    await state.update_data(punish_setting=punish_type, punish_action='mute')
+    ptype = callback.data.split('_')[-1]
+    await state.update_data(punish_setting=ptype, punish_action='mute')
+    await callback.message.edit_text("⏱ Введите длительность в минутах (0 = навсегда):", reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(PunishDurationStates.waiting_for_duration)
     await callback.answer()
 
@@ -3746,70 +3632,58 @@ async def punish_mute(callback: CallbackQuery, state: FSMContext):
 @edit_only()
 @check_owner()
 async def punish_kick(callback: CallbackQuery, state: FSMContext):
-    punish_type = callback.data.split('_')[-1]
+    ptype = callback.data.split('_')[-1]
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    if punish_type == "first":
+    if ptype == "first":
         db.save_antiflood_settings(chat_id, first_punish='kick')
-        await callback.answer("✅ Наказание: кик", show_alert=True)
-    elif punish_type == "repeat":
+    elif ptype == "repeat":
         db.save_antiflood_settings(chat_id, repeat_punish='kick')
-        await callback.answer("✅ Повторное наказание: кик", show_alert=True)
-    elif punish_type == "after":
+    elif ptype == "after":
         db.save_antiflood_settings(chat_id, punish_after_warn='kick')
-        await callback.answer("✅ Наказание после варнов: кик", show_alert=True)
+    await callback.answer("✅ Наказание: кик")
     await antiflood_manage(callback, state)
 
 @dp.callback_query(F.data.startswith("punish_ban_"))
 @edit_only()
 @check_owner()
 async def punish_ban(callback: CallbackQuery, state: FSMContext):
-    punish_type = callback.data.split('_')[-1]
-    data = await state.get_data()
-    chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    await callback.message.edit_text("⏱ Введите длительность бана в минутах (0 = навсегда):", reply_markup=get_back_keyboard("antiflood_manage"))
-    await state.update_data(punish_setting=punish_type, punish_action='ban')
+    ptype = callback.data.split('_')[-1]
+    await state.update_data(punish_setting=ptype, punish_action='ban')
+    await callback.message.edit_text("⏱ Введите длительность в минутах (0 = навсегда):", reply_markup=get_back_keyboard("antiflood_manage"))
     await state.set_state(PunishDurationStates.waiting_for_duration)
     await callback.answer()
 
 @dp.message(PunishDurationStates.waiting_for_duration)
 async def process_punish_duration(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    punish_setting = data.get('punish_setting')
-    punish_action = data.get('punish_action')
-    if not chat_id or not punish_setting or not punish_action:
-        await message.answer("❌ Ошибка! Начните заново.")
+    pset = data.get('punish_setting')
+    pact = data.get('punish_action')
+    if not chat_id or not pset or not pact:
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        minutes = int(message.text)
-        if minutes < 0:
-            await message.answer("❌ Введите положительное число или 0!")
+        mins = int(message.text)
+        if mins < 0:
+            await message.answer("❌ Положительное число или 0!")
             return
-        duration = minutes * 60
-        if punish_setting == "first":
-            db.save_antiflood_settings(chat_id, first_punish=punish_action, first_duration=duration)
-            await message.reply(f"✅ Первое наказание: {punish_action} на {format_time(duration)}")
-        elif punish_setting == "repeat":
-            db.save_antiflood_settings(chat_id, repeat_punish=punish_action, repeat_duration=duration)
-            await message.reply(f"✅ Повторное наказание: {punish_action} на {format_time(duration)}")
-        elif punish_setting == "after":
-            db.save_antiflood_settings(chat_id, punish_after_warn=punish_action, punish_after_warn_duration=duration)
-            await message.reply(f"✅ Наказание после варнов: {punish_action} на {format_time(duration)}")
+        dur = mins * 60
+        if pset == "first":
+            db.save_antiflood_settings(chat_id, first_punish=pact, first_duration=dur)
+        elif pset == "repeat":
+            db.save_antiflood_settings(chat_id, repeat_punish=pact, repeat_duration=dur)
+        elif pset == "after":
+            db.save_antiflood_settings(chat_id, punish_after_warn=pact, punish_after_warn_duration=dur)
+        await message.reply(f"✅ Наказание: {pact} на {format_time(dur)}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.callback_query(F.data == "puls_antispam_manage")
@@ -3819,11 +3693,10 @@ async def puls_antispam_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     enabled = db.get_puls_antispam_enabled(chat_id)
-    status = "✅ Включен" if enabled else "❌ Выключен"
-    await callback.message.edit_text(f"🛡️ Антиспам Пульса\n\nСтатус: {status}\n\nКогда функция включена, бот автоматически проверяет всех новых участников по глобальной базе спамеров Пульса. Если обнаружен спамер, он сразу банится.\n\nТакже бот отслеживает явный спам (50+ сообщений в минуту) и добавляет нарушителей в базу.", reply_markup=get_puls_antispam_keyboard(enabled))
+    await callback.message.edit_text(f"🛡️ Антиспам Пульса\nСтатус: {'✅ Вкл' if enabled else '❌ Выкл'}", reply_markup=get_puls_antispam_keyboard(enabled))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_puls_antispam")
@@ -3832,19 +3705,16 @@ async def puls_antispam_manage(callback: CallbackQuery, state: FSMContext):
 async def toggle_puls_antispam(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    current = db.get_puls_antispam_enabled(chat_id)
-    db.set_puls_antispam_enabled(chat_id, not current)
-    await callback.answer(f"✅ Антиспам Пульса {'включен' if not current else 'выключен'}!")
+    cur = db.get_puls_antispam_enabled(chat_id)
+    db.set_puls_antispam_enabled(chat_id, not cur)
+    await callback.answer(f"✅ Антиспам Пульса {'включён' if not cur else 'выключен'}!")
     await puls_antispam_manage(callback, state)
 
 @dp.callback_query(F.data == "puls_antispam_info")
 @edit_only()
 @check_owner()
 async def puls_antispam_info(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("ℹ️ Что такое Антиспам Пульса?\n\nЭто глобальная система защиты от спамеров:\n\n1️⃣ Если пользователь отправляет 50+ сообщений за 1 минуту, он получает предупреждение.\n2️⃣ При 3 предупреждениях он навсегда добавляется в базу спамеров Пульса.\n3️⃣ При входе в любую группу с ботом он автоматически банится.\n4️⃣ Админы могут разбанить спамера в своей группе командой /unban.\n5️⃣ Только разработчики бота могут удалить из базы командой /remove_spammer.\n\nСсылка на поддержку: @support_puls", reply_markup=get_back_keyboard("puls_antispam_manage"))
+    await callback.message.edit_text("ℹ️ Глобальная база спамеров Пульса\n3 предупреждения = бан во всех чатах", reply_markup=get_back_keyboard("puls_antispam_manage"))
     await callback.answer()
 
 @dp.callback_query(F.data == "confirmation_actions_manage")
@@ -3854,10 +3724,10 @@ async def confirmation_actions_manage(callback: CallbackQuery, state: FSMContext
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
-    settings = db.get_confirmation_settings(chat_id)
-    await callback.message.edit_text("✅ Подтверждение опасных действий\n\nВы можете включить подтверждение для каждого действия отдельно.\nЕсли включено, перед выполнением действия бот спросит подтверждение.", reply_markup=get_confirmation_actions_keyboard(settings))
+    s = db.get_confirmation_settings(chat_id)
+    await callback.message.edit_text("✅ Подтверждение опасных действий", reply_markup=get_confirmation_actions_keyboard(s))
     await callback.answer()
 
 @dp.callback_query(F.data == "toggle_confirm_ban")
@@ -3866,13 +3736,9 @@ async def confirmation_actions_manage(callback: CallbackQuery, state: FSMContext
 async def toggle_confirm_ban(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    settings = db.get_confirmation_settings(chat_id)
-    new_value = not settings.get('ban', False)
-    db.set_confirmation_setting(chat_id, 'ban', new_value)
-    await callback.answer(f"✅ Подтверждение бана {'включено' if new_value else 'выключено'}!")
+    s = db.get_confirmation_settings(chat_id)
+    db.set_confirmation_setting(chat_id, 'ban', not s['ban'])
+    await callback.answer("✅ Обновлено!")
     await confirmation_actions_manage(callback, state)
 
 @dp.callback_query(F.data == "toggle_confirm_kick")
@@ -3881,13 +3747,9 @@ async def toggle_confirm_ban(callback: CallbackQuery, state: FSMContext):
 async def toggle_confirm_kick(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    settings = db.get_confirmation_settings(chat_id)
-    new_value = not settings.get('kick', False)
-    db.set_confirmation_setting(chat_id, 'kick', new_value)
-    await callback.answer(f"✅ Подтверждение кика {'включено' if new_value else 'выключено'}!")
+    s = db.get_confirmation_settings(chat_id)
+    db.set_confirmation_setting(chat_id, 'kick', not s['kick'])
+    await callback.answer("✅ Обновлено!")
     await confirmation_actions_manage(callback, state)
 
 @dp.callback_query(F.data == "toggle_confirm_mute")
@@ -3896,20 +3758,16 @@ async def toggle_confirm_kick(callback: CallbackQuery, state: FSMContext):
 async def toggle_confirm_mute(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
-    if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
-        return
-    settings = db.get_confirmation_settings(chat_id)
-    new_value = not settings.get('mute', False)
-    db.set_confirmation_setting(chat_id, 'mute', new_value)
-    await callback.answer(f"✅ Подтверждение мута {'включено' if new_value else 'выключено'}!")
+    s = db.get_confirmation_settings(chat_id)
+    db.set_confirmation_setting(chat_id, 'mute', not s['mute'])
+    await callback.answer("✅ Обновлено!")
     await confirmation_actions_manage(callback, state)
 
 @dp.callback_query(F.data == "confirmation_actions_info")
 @edit_only()
 @check_owner()
 async def confirmation_actions_info(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("ℹ️ Что такое подтверждение действий?\n\nЕсли функция включена для конкретного действия, то перед его выполнением бот попросит подтверждение. Это защищает от случайных нажатий.\n\nНапример, если включено подтверждение бана, то после команды /ban бот сначала покажет информацию и спросит 'Подтверждаете?'. Только после подтверждения пользователь будет забанен.\n\nПо умолчанию всё выключено.", reply_markup=get_back_keyboard("confirmation_actions_manage"))
+    await callback.message.edit_text("ℹ️ Подтверждение защищает от случайных нажатий", reply_markup=get_back_keyboard("confirmation_actions_manage"))
     await callback.answer()
 
 @dp.callback_query(F.data == "confirmation_manage")
@@ -3919,45 +3777,29 @@ async def confirmation_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
-    conf_type = db.get_confirmation_type(chat_id)
-    has_rules = db.get_rules_html(chat_id) is not None and db.get_rules_enabled(chat_id)
-    type_names = {
-        'disabled': '🚫 Отключено',
-        'not_bot': '🤖 Только не бот',
-        'rules': '📜 Только правила',
-        'both': '2️⃣ Оба шага'
-    }
-    warning = ""
-    if (conf_type in ['rules', 'both']) and not has_rules:
-        warning = "\n\n⚠️ Внимание: Правила не установлены. Эта настройка не будет работать."
-    await callback.message.edit_text(f"✅ Настройки подтверждения\n\nТип: {type_names.get(conf_type, conf_type)}{warning}", reply_markup=get_confirmation_keyboard(conf_type, has_rules))
+    ct = db.get_confirmation_type(chat_id)
+    has_rules = db.get_rules_html(chat_id) is not None
+    await callback.message.edit_text("✅ Настройки подтверждения", reply_markup=get_confirmation_keyboard(ct, has_rules))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("confirmation_"))
 @edit_only()
 @check_owner()
 async def process_confirmation_type(callback: CallbackQuery, state: FSMContext):
-    conf_type = callback.data.replace("confirmation_", "")
+    ct = callback.data.replace("confirmation_", "")
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
-    has_rules = db.get_rules_html(chat_id) is not None and db.get_rules_enabled(chat_id)
-    if conf_type in ['rules', 'both'] and not has_rules:
-        error = "❌ Нельзя включить 'Только правила' или 'Оба шага' - сначала установите правила в группе!"
-        await callback.answer(error, show_alert=True)
+    has_rules = db.get_rules_html(chat_id) is not None
+    if ct in ['rules', 'both'] and not has_rules:
+        await callback.answer("❌ Сначала установите правила!", show_alert=True)
         return
-    db.set_confirmation_type(chat_id, conf_type)
-    names = {
-        'disabled': '🚫 Отключено',
-        'not_bot': '🤖 Только не бот',
-        'rules': '📜 Только правила',
-        'both': '2️⃣ Оба шага'
-    }
-    await callback.answer(f"✅ Установлено: {names.get(conf_type)}", show_alert=True)
+    db.set_confirmation_type(chat_id, ct)
+    await callback.answer("✅ Сохранено!")
     await confirmation_manage(callback, state)
 
 @dp.callback_query(F.data == "unlink_group_confirm")
@@ -3967,9 +3809,9 @@ async def unlink_group_confirm(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
-    await callback.message.edit_text("❓ Вы уверены, что хотите отвязать группу?\n\nВсе настройки будут сохранены, но вы больше не сможете управлять ей.", reply_markup=get_unlink_confirm_keyboard(chat_id))
+    await callback.message.edit_text("❓ Отвязать группу?", reply_markup=get_unlink_confirm_keyboard(chat_id))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("unlink_group_"))
@@ -3980,8 +3822,8 @@ async def unlink_group(callback: CallbackQuery, state: FSMContext):
     with db.get_connection() as conn:
         conn.execute('UPDATE group_rules SET owner_id = NULL WHERE chat_id = ?', (chat_id,))
         conn.commit()
-    await callback.message.edit_text("✅ Группа отвязана от вашего аккаунта.")
-    await callback.answer("✅ Группа отвязана!")
+    await callback.message.edit_text("✅ Группа отвязана!")
+    await callback.answer()
     await state.clear()
     await cmd_start(callback.message, state)
 
@@ -3992,12 +3834,12 @@ async def back_to_group_manage(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.message.edit_text("❌ Ошибка! Начните заново.")
+        await callback.message.edit_text("❌ Ошибка!")
         return
     with db.get_connection() as conn:
         r = conn.execute('SELECT chat_title FROM group_rules WHERE chat_id = ?', (chat_id,)).fetchone()
         title = r[0] if r else "Группа"
-    await callback.message.edit_text(f"⚙️ Настройка группы: {title}\n\nВыберите действие:", reply_markup=get_group_manage_keyboard())
+    await callback.message.edit_text(f"⚙️ Настройка: {title}", reply_markup=get_group_manage_keyboard())
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("show_group_rules_"))
@@ -4007,9 +3849,9 @@ async def show_group_rules(callback: CallbackQuery):
     chat_id = int(callback.data.split('_')[-1])
     rules = db.get_rules_html(chat_id)
     if rules and db.get_rules_enabled(chat_id):
-        await callback.message.answer(rules, parse_mode="HTML")
+        await callback.message.answer(safe_html(rules, True), parse_mode="HTML")
     else:
-        await callback.message.answer("❌ В этом чате ещё не установлены правила.")
+        await callback.message.answer("❌ Правила не установлены")
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("my_stats_"))
@@ -4028,25 +3870,25 @@ async def my_stats(callback: CallbackQuery):
     warns = get_spammer_warnings(user.id)
     emoji = get_premium_status_emoji(gu['is_premium'])
     if not stat:
-        text = (f"Профиль {emoji} {user.full_name}\n\n" +
-                f"🆔 ID: <code>{gu['global_id']}</code>\n" +
-                f"📅 Впервые замечен: {format_datetime(gu['first_seen'])}\n" +
+        text = (customization.format_message('profile_header', premium_emoji=emoji, name=user.full_name) + "\n\n" +
+                customization.format_message('profile_id', global_id=gu['global_id']) + "\n" +
+                customization.format_message('profile_first_seen', first_seen=format_datetime(gu['first_seen'])) + "\n" +
                 ("⭐ Премиум пользователь\n" if gu['is_premium'] else "") +
-                f"🛡️ Антиспам база Puls: {warns}/{SPAM_WARN_LIMIT} предупреждений\n\n" +
-                "📊 У пользователя пока нет сообщений в этом чате")
+                customization.format_message('profile_antispam', warnings=warns, limit=SPAM_WARN_LIMIT) + "\n\n" +
+                customization.get_template('profile_no_stats').get_text())
     else:
-        text = (f"Профиль {emoji} {user.full_name}\n\n" +
-                f"🆔 ID: <code>{gu['global_id']}</code>\n" +
-                f"📅 Впервые замечен: {format_datetime(gu['first_seen'])}\n" +
+        text = (customization.format_message('profile_header', premium_emoji=emoji, name=user.full_name) + "\n\n" +
+                customization.format_message('profile_id', global_id=gu['global_id']) + "\n" +
+                customization.format_message('profile_first_seen', first_seen=format_datetime(gu['first_seen'])) + "\n" +
                 ("⭐ Премиум пользователь\n" if gu['is_premium'] else "") +
-                f"🛡️ Антиспам база Puls: {warns}/{SPAM_WARN_LIMIT} предупреждений\n\n" +
-                "📊 Статистика в этом чате:\n" +
-                f"• За день: {stat['day_messages']} 💬\n" +
-                f"• За неделю: {stat['week_messages']} 💬\n" +
-                f"• За месяц: {stat['month_messages']} 💬\n" +
-                f"• Всего: {stat['all_messages']} 💬\n" +
-                f"• Место в топе: {pos}")
-    await callback.message.answer(text, parse_mode="HTML")
+                customization.format_message('profile_antispam', warnings=warns, limit=SPAM_WARN_LIMIT) + "\n\n" +
+                customization.get_template('profile_stats_header').get_text() + "\n" +
+                customization.format_message('profile_day', count=stat['day_messages']) + "\n" +
+                customization.format_message('profile_week', count=stat['week_messages']) + "\n" +
+                customization.format_message('profile_month', count=stat['month_messages']) + "\n" +
+                customization.format_message('profile_total', count=stat['all_messages']) + "\n" +
+                customization.format_message('profile_position', position=pos))
+    await callback.message.answer(safe_html(text, True), parse_mode="HTML")
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("top_active_"))
@@ -4060,10 +3902,10 @@ async def top_active(callback: CallbackQuery):
         await asyncio.sleep(0.1)
     top = db.get_top_messages(chat_id, limit=10)
     if not top:
-        await callback.message.answer("📊 В этом чате пока нет сообщений")
+        await callback.message.answer("📊 Нет сообщений")
         await callback.answer()
         return
-    text = "🏆 Топ активных (всего сообщений):\n\n"
+    text = customization.get_template('top_header').get_text() + "\n\n"
     for i, (uid, cnt) in enumerate(top, 1):
         try:
             m = await bot.get_chat_member(chat_id, uid)
@@ -4076,8 +3918,8 @@ async def top_active(callback: CallbackQuery):
             warns = 0
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
         warning = f" ⚠️{warns}" if warns > 0 else ""
-        text += f"{medal} {emoji} {name} — {cnt} 💬{warning}\n"
-    await callback.message.answer(text, parse_mode="HTML")
+        text += customization.format_message('top_entry', medal=medal, premium_emoji=emoji, name=name, count=cnt, warnings=warning) + "\n"
+    await callback.message.answer(safe_html(text, True), parse_mode="HTML")
     await callback.answer()
 
 @dp.callback_query(F.data == "about")
@@ -4086,31 +3928,7 @@ async def top_active(callback: CallbackQuery):
 async def about(callback: CallbackQuery):
     is_admin = callback.from_user.id in ADMIN_IDS
     is_group = callback.message.chat.type != 'private'
-    text = """🤖 Puls Chat Manager
-
-Версия: 8.0.0
-
-📌 Возможности:
-• Управление правилами
-• Авто-рассылка
-• Умный антифлуд (текст/медиа)
-• Антиспам Пульса (глобальная база спамеров)
-• Анти-ссылки (блокировка любых ссылок)
-• Антимат (фильтр нецензурной лексики)
-• Рейд-защита (блокировка массовых вступлений)
-• Авто-комментарий к постам канала
-• Автоответчик (до 100 триггеров)
-• Статистика сообщений
-• Приветствия
-• Система модерации (мут/бан/кик/варн)
-• Кнопка снятия ограничения
-• Группы логов
-• Подтверждение входа
-• Подтверждение опасных действий
-• Полная кастомизация всех сообщений и фото
-• Поддержка премиум эмодзи ⭐
-
-➕ Нажмите «Добавить в группу» чтобы пригласить меня"""
+    text = "🤖 Puls Chat Manager v8.0\n\nФункции: правила, антифлуд, антимат, анти-ссылки, рейд-защита, авто-комментарий, автоответчик, статистика, модерация, лог-группы"
     await callback.message.edit_text(text, reply_markup=get_main_keyboard(is_group, is_admin))
     await callback.answer()
 
@@ -4120,43 +3938,7 @@ async def about(callback: CallbackQuery):
 async def help(callback: CallbackQuery):
     is_admin = callback.from_user.id in ADMIN_IDS
     is_group = callback.message.chat.type != 'private'
-    text = """🆘 Помощь
-
-🔹 Команды в группе:
-• /rules - показать правила
-• /stats - моя статистика
-• /top - топ активных
-• /profile - профиль пользователя
-• /group - управление группой
-• /puls - проверка пинга
-• /mute [время] [причина] - замутить
-• /unmute - размутить
-• /ban [время] [причина] - забанить
-• /unban - разбанить
-• /kick [причина] - кикнуть
-• /warn [причина] - предупредить
-• /mods - список модераторов
-
-🔹 Команды для владельца:
-• /give_mute - дать право мутить
-• /ungive_mute - забрать право мутить
-• /give_kick - дать право кикать
-• /ungive_kick - забрать право кикать
-• /give_ban - дать право банить
-• /ungive_ban - забрать право банить
-• /give_warn - дать право варнить
-• /ungive_warn - забрать право варнить
-
-🔹 В ЛС:
-• /start - главное меню
-• /groupsettings - управление группами
-• /loggroup - управление группами логов
-
-🔹 Антиспам Пульса:
-• Бот автоматически отслеживает 50+ сообщений в минуту
-• 3 предупреждения = добавление в базу спамеров
-• В профиле отображается количество предупреждений
-• Поддержка: @support_puls"""
+    text = "🆘 Помощь\n\nКоманды в группе:\n/rules, /stats, /top, /profile, /group, /puls, /mute, /unmute, /ban, /unban, /kick, /warn, /mods\n\nВладельцу: /give_mute, /ungive_mute, /give_kick, /ungive_kick, /give_ban, /ungive_ban, /give_warn, /ungive_warn\n\nВ ЛС: /start, /groupsettings, /loggroup"
     await callback.message.edit_text(text, reply_markup=get_main_keyboard(is_group, is_admin))
     await callback.answer()
 
@@ -4169,14 +3951,7 @@ async def admin_panel(callback: CallbackQuery, state: FSMContext):
         return
     await state.clear()
     status = "🟢 РАБОТАЕТ" if not technical_maintenance else "🔴 ТЕХРАБОТЫ"
-    spammer_count = len(global_spammers)
-    text = f"""👑 Панель администратора
-
-Статус бота: {status}
-Сообщение: {maintenance_message}
-Спамеров в базе: {spammer_count}
-
-Выберите действие:"""
+    text = f"👑 Панель администратора\n\nСтатус: {status}\nСпамеров: {len(global_spammers)}"
     builder = InlineKeyboardBuilder()
     builder.add(create_button("📊 Статистика", "admin_stats"))
     builder.add(create_button("📱 Группы", "admin_groups"))
@@ -4200,7 +3975,7 @@ async def admin_custom(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
-    await callback.message.edit_text("🎨 Кастомизация бота\n\nЗдесь вы можете изменить тексты и фото всех сообщений бота.\n\nВыберите раздел:", reply_markup=get_admin_custom_keyboard())
+    await callback.message.edit_text("🎨 Кастомизация", reply_markup=get_admin_custom_keyboard())
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_custom_texts")
@@ -4210,7 +3985,7 @@ async def admin_custom_texts(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
-    await callback.message.edit_text("📝 Редактирование текстов\n\nВыберите сообщение для редактирования:", reply_markup=get_texts_list_keyboard(0))
+    await callback.message.edit_text("📝 Редактирование текстов", reply_markup=get_texts_list_keyboard(0))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("texts_page_"))
@@ -4221,7 +3996,7 @@ async def texts_page(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     page = int(callback.data.split('_')[-1])
-    await callback.message.edit_text("📝 Редактирование текстов\n\nВыберите сообщение для редактирования:", reply_markup=get_texts_list_keyboard(page))
+    await callback.message.edit_text("📝 Редактирование текстов", reply_markup=get_texts_list_keyboard(page))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("edit_text_"))
@@ -4231,16 +4006,9 @@ async def edit_text(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
-    msg_key = callback.data.replace("edit_text_", "")
-    template = customization.get_template(msg_key)
-    if not template:
-        await callback.answer("❌ Шаблон не найден!", show_alert=True)
-        return
-    current_text = template.get_text()
-    has_photo = template.get_photo() is not None
-    text = f"📝 Редактирование сообщения: {msg_key}\n\nТекущий текст:\n{current_text}\n\n{'🖼 У сообщения есть фото' if has_photo else ''}\n\nОтправьте новый текст для этого сообщения.\nИли отправьте /cancel для отмены."
-    await state.update_data(edit_msg_key=msg_key)
-    await callback.message.edit_text(text, parse_mode="HTML")
+    key = callback.data.replace("edit_text_", "")
+    await state.update_data(edit_msg_key=key)
+    await callback.message.edit_text(f"📝 Редактирование: {key}\nОтправьте новый текст", parse_mode="HTML")
     await state.set_state(CustomMessageStates.waiting_for_new_text)
     await callback.answer()
 
@@ -4251,21 +4019,17 @@ async def process_new_text(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    msg_key = data.get('edit_msg_key')
-    if not msg_key:
-        await message.answer("❌ Ошибка! Начните заново.")
+    key = data.get('edit_msg_key')
+    if not key:
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    new_text = message.html_text.strip() if message.text else ""
-    if not new_text:
-        await message.answer("❌ Отправьте текст!")
-        return
-    template = customization.get_template(msg_key)
-    if template:
-        template.set_custom(new_text, None)
-        db.save_custom_message(msg_key, new_text, None)
-        await message.answer(f"✅ Сообщение {msg_key} обновлено!")
-        await add_premium_reaction(message, "✅")
+    text = message.html_text.strip()
+    tpl = customization.get_template(key)
+    if tpl:
+        tpl.set_custom(text, None)
+        db.save_custom_message(key, text, None)
+        await message.answer(f"✅ Сообщение {key} обновлено!")
     else:
         await message.answer("❌ Шаблон не найден!")
     await state.clear()
@@ -4277,7 +4041,7 @@ async def admin_custom_photos(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
-    await callback.message.edit_text("🖼 Редактирование фото\n\nВыберите сообщение для изменения фото:", reply_markup=get_photos_list_keyboard(0))
+    await callback.message.edit_text("🖼 Редактирование фото", reply_markup=get_photos_list_keyboard(0))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("photos_page_"))
@@ -4288,7 +4052,7 @@ async def photos_page(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     page = int(callback.data.split('_')[-1])
-    await callback.message.edit_text("🖼 Редактирование фото\n\nВыберите сообщение для изменения фото:", reply_markup=get_photos_list_keyboard(page))
+    await callback.message.edit_text("🖼 Редактирование фото", reply_markup=get_photos_list_keyboard(page))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("edit_photo_"))
@@ -4298,15 +4062,9 @@ async def edit_photo(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
-    msg_key = callback.data.replace("edit_photo_", "")
-    template = customization.get_template(msg_key)
-    if not template:
-        await callback.answer("❌ Шаблон не найден!", show_alert=True)
-        return
-    current_photo = template.get_photo()
-    text = f"🖼 Редактирование фото для: {msg_key}\n\n{'✅ Текущее фото есть' if current_photo else '❌ Текущего фото нет'}\n\nОтправьте новое фото для этого сообщения.\nИли отправьте /reset чтобы убрать фото.\nИли отправьте /cancel для отмены."
-    await state.update_data(edit_photo_key=msg_key)
-    await callback.message.edit_text(text, parse_mode="HTML")
+    key = callback.data.replace("edit_photo_", "")
+    await state.update_data(edit_photo_key=key)
+    await callback.message.edit_text(f"🖼 Редактирование фото: {key}\nОтправьте новое фото или /reset", parse_mode="HTML")
     await state.set_state(CustomMessageStates.waiting_for_new_photo)
     await callback.answer()
 
@@ -4317,18 +4075,17 @@ async def process_new_photo(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    msg_key = data.get('edit_photo_key')
-    if not msg_key:
-        await message.answer("❌ Ошибка! Начните заново.")
+    key = data.get('edit_photo_key')
+    if not key:
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    photo_id = message.photo[-1].file_id
-    template = customization.get_template(msg_key)
-    if template:
-        template.set_custom(photo=photo_id)
-        db.save_custom_message(msg_key, photo=photo_id)
-        await message.answer(f"✅ Фото для {msg_key} обновлено!")
-        await add_premium_reaction(message, "✅")
+    photo = message.photo[-1].file_id
+    tpl = customization.get_template(key)
+    if tpl:
+        tpl.set_custom(photo=photo)
+        db.save_custom_message(key, photo=photo)
+        await message.answer(f"✅ Фото для {key} обновлено!")
     else:
         await message.answer("❌ Шаблон не найден!")
     await state.clear()
@@ -4340,17 +4097,16 @@ async def reset_photo(message: Message, state: FSMContext):
         await state.clear()
         return
     data = await state.get_data()
-    msg_key = data.get('edit_photo_key')
-    if not msg_key:
-        await message.answer("❌ Ошибка! Начните заново.")
+    key = data.get('edit_photo_key')
+    if not key:
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    template = customization.get_template(msg_key)
-    if template:
-        template.reset()
-        db.reset_custom_message(msg_key)
-        await message.answer(f"✅ Фото для {msg_key} сброшено к стандартному!")
-        await add_premium_reaction(message, "✅")
+    tpl = customization.get_template(key)
+    if tpl:
+        tpl.reset()
+        db.reset_custom_message(key)
+        await message.answer(f"✅ Фото для {key} сброшено!")
     else:
         await message.answer("❌ Шаблон не найден!")
     await state.clear()
@@ -4367,10 +4123,10 @@ async def admin_custom_reset_all(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Да, сбросить всё", "admin_custom_reset_confirm", "danger"))
-    builder.add(create_button("❌ Нет", "admin_custom", "secondary"))
+    builder.add(create_button("✅ Да", "admin_custom_reset_confirm"))
+    builder.add(create_button("❌ Нет", "admin_custom"))
     builder.adjust(2)
-    await callback.message.edit_text("⚠️ Вы уверены, что хотите сбросить все кастомные настройки?\n\nВсе тексты и фото вернутся к стандартным.", reply_markup=builder.as_markup())
+    await callback.message.edit_text("⚠️ Сбросить все настройки?", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_custom_reset_confirm")
@@ -4380,10 +4136,10 @@ async def admin_custom_reset_confirm(callback: CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
-    for key, template in customization.templates.items():
-        template.reset()
+    for key, tpl in customization.templates.items():
+        tpl.reset()
         db.reset_custom_message(key)
-    await callback.message.edit_text("✅ Все настройки сброшены к стандартным!", reply_markup=get_back_keyboard("admin_custom"))
+    await callback.message.edit_text("✅ Все сброшено!", reply_markup=get_back_keyboard("admin_custom"))
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_spammers")
@@ -4394,19 +4150,15 @@ async def admin_spammers(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     if not global_spammers:
-        await callback.message.edit_text("✅ База спамеров пуста. Пока никто не спамил.", reply_markup=get_back_keyboard("admin_panel"))
+        await callback.message.edit_text("✅ База спамеров пуста", reply_markup=get_back_keyboard("admin_panel"))
         await callback.answer()
         return
-    text = "🚫 Глобальная база спамеров:\n\n"
-    for user_id, info in list(global_spammers.items())[:20]:
-        reason = info.get("причина", "неизвестно")
-        date = format_datetime(info.get("когда_добавлен", 0))
-        unbanned_in = len(info.get("разбанен_в", set()))
-        warnings = info.get("предупреждения", 1)
-        text += f"• ID: {user_id}\n  Причина: {reason}\n  Предупреждений: {warnings}/{SPAM_WARN_LIMIT}\n  Добавлен: {date}\n  Разбанен в {unbanned_in} чатах\n\n"
+    text = "🚫 Спамеры:\n\n"
+    for uid, info in list(global_spammers.items())[:20]:
+        text += f"• ID: {uid}\n  Причина: {info.get('причина')}\n  Предупреждений: {info.get('предупреждения')}\n\n"
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🔄 Обновить", "admin_spammers", "primary"))
-    builder.add(create_button("◀ Назад", "admin_panel", "secondary"))
+    builder.add(create_button("🔄 Обновить", "admin_spammers"))
+    builder.add(create_button("◀ Назад", "admin_panel"))
     builder.adjust(2)
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
@@ -4419,15 +4171,14 @@ async def admin_maintenance(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     global technical_maintenance, maintenance_message
-    status = "🔴 ВКЛ" if technical_maintenance else "🟢 ВЫКЛ"
-    text = f"🛠 Режим технических работ\n\nСтатус: {status}\nСообщение: {maintenance_message}"
+    text = f"🛠 Техработы\n\nСтатус: {'🔴 ВКЛ' if technical_maintenance else '🟢 ВЫКЛ'}\nСообщение: {maintenance_message}"
     builder = InlineKeyboardBuilder()
     if technical_maintenance:
-        builder.add(create_button("🟢 Выключить", "maintenance_off", "success"))
+        builder.add(create_button("🟢 Выключить", "maintenance_off"))
     else:
-        builder.add(create_button("🔴 Включить", "maintenance_on", "danger"))
-    builder.add(create_button("✏️ Изменить сообщение", "maintenance_message", "primary"))
-    builder.add(create_button("◀ Назад", "admin_panel", "secondary"))
+        builder.add(create_button("🔴 Включить", "maintenance_on"))
+    builder.add(create_button("✏️ Изменить сообщение", "maintenance_message"))
+    builder.add(create_button("◀ Назад", "admin_panel"))
     builder.adjust(2)
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
@@ -4442,7 +4193,7 @@ async def maintenance_on(callback: CallbackQuery):
     global technical_maintenance
     technical_maintenance = True
     await notify_all_groups(maintenance_message)
-    await callback.answer("🛠 Техработы ВКЛЮЧЕНЫ!", show_alert=True)
+    await callback.answer("🛠 Техработы ВКЛЮЧЕНЫ!")
     await admin_maintenance(callback)
 
 @dp.callback_query(F.data == "maintenance_off")
@@ -4455,7 +4206,7 @@ async def maintenance_off(callback: CallbackQuery):
     global technical_maintenance
     technical_maintenance = False
     await notify_all_groups("✅ Бот снова в работе!")
-    await callback.answer("🟢 Техработы ВЫКЛЮЧЕНЫ!", show_alert=True)
+    await callback.answer("🟢 Техработы ВЫКЛЮЧЕНЫ!")
     await admin_maintenance(callback)
 
 @dp.callback_query(F.data == "maintenance_message")
@@ -4465,7 +4216,7 @@ async def maintenance_message(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
-    await callback.message.edit_text("📝 Отправьте новое сообщение для режима техработ:")
+    await callback.message.edit_text("📝 Отправьте новое сообщение")
     await state.set_state(MaintenanceStates.waiting_for_message)
     await callback.answer()
 
@@ -4496,23 +4247,13 @@ async def admin_stats(callback: CallbackQuery):
     with db.get_connection() as conn:
         groups = conn.execute('SELECT COUNT(*) FROM group_rules').fetchone()[0]
         users = conn.execute('SELECT COUNT(*) FROM global_users').fetchone()[0]
-        violations = conn.execute('SELECT COUNT(*) FROM violation_logs').fetchone()[0]
-        triggers = conn.execute('SELECT COUNT(*) FROM auto_responses').fetchone()[0]
-        mod_actions = conn.execute('SELECT COUNT(*) FROM moderator_logs').fetchone()[0]
-    spammer_count = len(global_spammers)
-    text = f"""📊 Статистика бота
-
-📱 Групп: {groups}
-👥 Пользователей: {users}
-🚫 Нарушений: {violations}
-🛡️ Действий модераторов: {mod_actions}
-🚫 Спамеров в базе: {spammer_count}
-🤖 Триггеров: {triggers}/{MAX_TRIGGERS}
-
-🕐 Время сервера: {datetime.now(SERVER_TZ).strftime('%Y-%m-%d %H:%M:%S')}"""
+        viol = conn.execute('SELECT COUNT(*) FROM violation_logs').fetchone()[0]
+        trig = conn.execute('SELECT COUNT(*) FROM auto_responses').fetchone()[0]
+        mods = conn.execute('SELECT COUNT(*) FROM moderator_logs').fetchone()[0]
+    text = f"📊 Статистика\n\nГрупп: {groups}\nПользователей: {users}\nНарушений: {viol}\nДействий модов: {mods}\nТриггеров: {trig}\nСпамеров: {len(global_spammers)}"
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🔄 Обновить", "admin_stats", "primary"))
-    builder.add(create_button("◀ Назад", "admin_panel", "secondary"))
+    builder.add(create_button("🔄 Обновить", "admin_stats"))
+    builder.add(create_button("◀ Назад", "admin_panel"))
     builder.adjust(2)
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
@@ -4525,20 +4266,12 @@ async def admin_groups(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     with db.get_connection() as conn:
-        groups = conn.execute('SELECT chat_id, chat_title, rules_enabled, welcome_enabled, puls_antispam_enabled FROM group_rules LIMIT 20').fetchall()
+        groups = conn.execute('SELECT chat_id, chat_title FROM group_rules LIMIT 20').fetchall()
     text = "📱 Группы (первые 20):\n\n"
-    for chat_id, title, rules_enabled, welcome_enabled, puls_enabled in groups:
-        status = []
-        if rules_enabled:
-            status.append("📜✅")
-        if welcome_enabled:
-            status.append("👋✅")
-        if puls_enabled:
-            status.append("🛡️✅")
-        status_text = f" [{''.join(status)}]" if status else ""
-        text += f"• {title or 'Без названия'}{status_text} | ID: {chat_id}\n"
+    for cid, title in groups:
+        text += f"• {title or 'Без названия'} | ID: {cid}\n"
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("◀ Назад", "admin_panel", "secondary"))
+    builder.add(create_button("◀ Назад", "admin_panel"))
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
 
@@ -4550,14 +4283,12 @@ async def admin_users(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     with db.get_connection() as conn:
-        users = conn.execute('SELECT full_name, global_id, first_seen, is_premium FROM global_users ORDER BY first_seen DESC LIMIT 20').fetchall()
+        users = conn.execute('SELECT full_name, global_id, first_seen FROM global_users ORDER BY first_seen DESC LIMIT 20').fetchall()
     text = "👥 Последние пользователи:\n\n"
-    for name, gid, ts, is_premium in users:
-        date = format_datetime(ts)
-        premium_emoji = "⭐" if is_premium else ""
-        text += f"• {premium_emoji} {name}\n  ID: {gid} | {date}\n\n"
+    for name, gid, ts in users:
+        text += f"• {name}\n  ID: {gid} | {format_datetime(ts)}\n\n"
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("◀ Назад", "admin_panel", "secondary"))
+    builder.add(create_button("◀ Назад", "admin_panel"))
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
 
@@ -4571,15 +4302,13 @@ async def admin_logs(callback: CallbackQuery):
     with db.get_connection() as conn:
         logs = conn.execute('SELECT user_name, reason, punishment, timestamp FROM violation_logs ORDER BY timestamp DESC LIMIT 20').fetchall()
     text = "📋 Последние нарушения:\n\n"
-    if logs:
-        for name, reason, punishment, ts in logs:
-            date = format_datetime(ts)
-            text += f"• {name}\n  {reason} → {punishment} | {date}\n\n"
-    else:
-        text += "Нарушений пока нет."
+    for name, reason, punish, ts in logs:
+        text += f"• {name}\n  {reason} → {punish} | {format_datetime(ts)}\n\n"
+    if not logs:
+        text += "Нарушений нет"
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("🗑 Очистить", "admin_logs_clear", "danger"))
-    builder.add(create_button("◀ Назад", "admin_panel", "secondary"))
+    builder.add(create_button("🗑 Очистить", "admin_logs_clear"))
+    builder.add(create_button("◀ Назад", "admin_panel"))
     builder.adjust(2)
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
@@ -4592,10 +4321,10 @@ async def admin_logs_clear(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Да, очистить", "admin_logs_clear_confirm", "danger"))
-    builder.add(create_button("🚫 Нет", "admin_logs", "secondary"))
+    builder.add(create_button("✅ Да", "admin_logs_clear_confirm"))
+    builder.add(create_button("🚫 Нет", "admin_logs"))
     builder.adjust(2)
-    await callback.message.edit_text("⚠️ Вы уверены, что хотите очистить все логи?\n\nЭто действие нельзя отменить!", reply_markup=builder.as_markup())
+    await callback.message.edit_text("⚠️ Очистить все логи?", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_logs_clear_confirm")
@@ -4608,7 +4337,7 @@ async def admin_logs_clear_confirm(callback: CallbackQuery):
     with db.get_connection() as conn:
         conn.execute('DELETE FROM violation_logs')
         conn.commit()
-    await callback.answer("✅ Все логи очищены!", show_alert=True)
+    await callback.answer("✅ Логи очищены!")
     await admin_logs(callback)
 
 @dp.callback_query(F.data == "admin_broadcast")
@@ -4619,12 +4348,12 @@ async def admin_broadcast(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("📱 Только в группы", "broadcast_groups", "primary"))
-    builder.add(create_button("💬 Только в ЛС", "broadcast_pm", "primary"))
-    builder.add(create_button("🌍 В группы и ЛС", "broadcast_all", "success"))
-    builder.add(create_button("◀ Назад", "admin_panel", "secondary"))
+    builder.add(create_button("📱 Только в группы", "broadcast_groups"))
+    builder.add(create_button("💬 Только в ЛС", "broadcast_pm"))
+    builder.add(create_button("🌍 В группы и ЛС", "broadcast_all"))
+    builder.add(create_button("◀ Назад", "admin_panel"))
     builder.adjust(2)
-    await callback.message.edit_text("📢 Рассылка сообщений\n\nВыберите, куда отправлять рассылку:", reply_markup=builder.as_markup())
+    await callback.message.edit_text("📢 Рассылка\n\nВыберите получателей:", reply_markup=builder.as_markup())
     await state.set_state(AdminBroadcastStates.waiting_for_target)
     await callback.answer()
 
@@ -4637,7 +4366,7 @@ async def broadcast_target(callback: CallbackQuery, state: FSMContext):
         return
     target = callback.data.replace("broadcast_", "")
     await state.update_data(broadcast_target=target)
-    await callback.message.edit_text("📝 Отправьте текст или медиа для рассылки.\n\nПоддерживается: текст, фото, видео, GIF, стикер, документ, аудио.\n\nИли отправьте /cancel для отмены.", reply_markup=get_back_keyboard("admin_panel"))
+    await callback.message.edit_text("📝 Отправьте текст или медиа для рассылки.\nПоддерживается: текст, фото, видео, GIF, стикер", reply_markup=get_back_keyboard("admin_panel"))
     await state.set_state(AdminBroadcastStates.waiting_for_text)
     await callback.answer()
 
@@ -4650,31 +4379,25 @@ async def process_broadcast(message: Message, state: FSMContext):
     data = await state.get_data()
     target = data.get('broadcast_target')
     if not target:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    media_id = None
-    media_type = None
+    media = None
+    mtype = None
     caption = message.caption or ""
     text = message.text or caption
     if message.photo:
-        media_id = message.photo[-1].file_id
-        media_type = 'photo'
+        media = message.photo[-1].file_id
+        mtype = 'photo'
     elif message.video:
-        media_id = message.video.file_id
-        media_type = 'video'
+        media = message.video.file_id
+        mtype = 'video'
     elif message.animation:
-        media_id = message.animation.file_id
-        media_type = 'animation'
+        media = message.animation.file_id
+        mtype = 'animation'
     elif message.sticker:
-        media_id = message.sticker.file_id
-        media_type = 'sticker'
-    elif message.document:
-        media_id = message.document.file_id
-        media_type = 'document'
-    elif message.audio:
-        media_id = message.audio.file_id
-        media_type = 'audio'
+        media = message.sticker.file_id
+        mtype = 'sticker'
     chats = []
     if target in ['groups', 'all']:
         with db.get_connection() as conn:
@@ -4683,40 +4406,36 @@ async def process_broadcast(message: Message, state: FSMContext):
         with db.get_connection() as conn:
             chats.extend([r[0] for r in conn.execute('SELECT user_id FROM global_users').fetchall()])
     if not chats:
-        await message.answer("❌ Нет получателей для рассылки!")
+        await message.answer("❌ Нет получателей!")
         await state.clear()
         return
-    sent, failed = 0, 0
+    sent, fail = 0, 0
     errors = []
-    status_msg = await message.answer(f"📤 Начинаю рассылку...\nВсего получателей: {len(chats)}")
-    for chat_id in set(chats):
+    status = await message.answer(f"📤 Начинаю рассылку...\nВсего: {len(chats)}")
+    for cid in set(chats):
         try:
-            if media_id:
-                if media_type == 'photo':
-                    await bot.send_photo(chat_id, media_id, caption=text or None, parse_mode="HTML")
-                elif media_type == 'video':
-                    await bot.send_video(chat_id, media_id, caption=text or None, parse_mode="HTML")
-                elif media_type == 'animation':
-                    await bot.send_animation(chat_id, media_id, caption=text or None, parse_mode="HTML")
-                elif media_type == 'sticker':
-                    await bot.send_sticker(chat_id, media_id)
-                elif media_type == 'document':
-                    await bot.send_document(chat_id, media_id, caption=text or None, parse_mode="HTML")
-                elif media_type == 'audio':
-                    await bot.send_audio(chat_id, media_id, caption=text or None, parse_mode="HTML")
+            if media:
+                if mtype == 'photo':
+                    await bot.send_photo(cid, media, caption=text or None, parse_mode="HTML")
+                elif mtype == 'video':
+                    await bot.send_video(cid, media, caption=text or None, parse_mode="HTML")
+                elif mtype == 'animation':
+                    await bot.send_animation(cid, media, caption=text or None, parse_mode="HTML")
+                elif mtype == 'sticker':
+                    await bot.send_sticker(cid, media)
             else:
-                await bot.send_message(chat_id, text, parse_mode="HTML")
+                await bot.send_message(cid, text, parse_mode="HTML")
             sent += 1
-        except TelegramForbiddenError:
-            failed += 1
-            errors.append(f"❌ {chat_id}: Бот заблокирован или чат не найден")
+        except TelegramForbiddenError as e:
+            fail += 1
+            errors.append(f"❌ {cid}: Бот заблокирован или чат не найден")
         except Exception as e:
-            failed += 1
-            errors.append(f"❌ {chat_id}: {str(e)[:50]}")
-        if (sent + failed) % 10 == 0:
-            await status_msg.edit_text(f"📤 Прогресс: {sent + failed}/{len(chats)}\n✅ {sent}\n❌ {failed}")
+            fail += 1
+            errors.append(f"❌ {cid}: {str(e)[:50]}")
+        if (sent + fail) % 10 == 0:
+            await status.edit_text(f"📤 Прогресс: {sent + fail}/{len(chats)}\n✅ {sent}\n❌ {fail}")
         await asyncio.sleep(0.05)
-    await status_msg.edit_text(f"✅ Рассылка завершена!\n✅ Успешно: {sent}\n❌ Ошибок: {failed}")
+    await status.edit_text(f"✅ Рассылка завершена!\n✅ {sent}\n❌ {fail}")
     if errors:
         await message.answer("\n".join(errors[:10]), parse_mode="HTML")
     await add_premium_reaction(message, "✅")
@@ -4730,10 +4449,10 @@ async def admin_backup(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     try:
-        backup_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-        shutil.copy2("puls_manager.db", backup_name)
-        await callback.message.answer_document(FSInputFile(backup_name), caption=f"✅ Бэкап создан: {backup_name}")
-        os.remove(backup_name)
+        name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        shutil.copy2("puls_manager.db", name)
+        await callback.message.answer_document(FSInputFile(name), caption=f"✅ Бэкап: {name}")
+        os.remove(name)
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
@@ -4745,10 +4464,10 @@ async def admin_shutdown(callback: CallbackQuery):
         await callback.answer("❌ Доступ запрещён!", show_alert=True)
         return
     builder = InlineKeyboardBuilder()
-    builder.add(create_button("✅ Да, выключить", "admin_shutdown_confirm", "danger"))
-    builder.add(create_button("🚫 Нет", "admin_panel", "secondary"))
+    builder.add(create_button("✅ Да", "admin_shutdown_confirm"))
+    builder.add(create_button("🚫 Нет", "admin_panel"))
     builder.adjust(2)
-    await callback.message.edit_text("⚠️ Вы уверены, что хотите выключить бота?\n\nАдминистраторы всё ещё будут иметь доступ.", reply_markup=builder.as_markup())
+    await callback.message.edit_text("⚠️ Выключить бота?", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data == "admin_shutdown_confirm")
@@ -4761,134 +4480,8 @@ async def admin_shutdown_confirm(callback: CallbackQuery):
     global technical_maintenance, maintenance_message
     technical_maintenance = True
     maintenance_message = "🛑 Бот остановлен администратором"
-    await callback.message.edit_text("🛑 Бот остановлен\n\nАдминистраторы всё ещё имеют доступ.")
+    await callback.message.edit_text("🛑 Бот остановлен")
     await callback.answer()
-
-@dp.callback_query(F.data.startswith("confirm_"))
-@edit_only()
-@check_owner()
-async def process_confirm_action(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    action = data.get('action')
-    target_id = data.get('target_id')
-    target_name = data.get('target_name')
-    duration = data.get('duration')
-    reason = data.get('reason')
-    if callback.data.endswith('_yes'):
-        if action == 'mute':
-            await execute_mute(callback.message.chat.id, target_id, target_name, duration, reason, callback.from_user, data.get('message_id', 0))
-        elif action == 'ban':
-            await execute_ban(callback.message.chat.id, target_id, target_name, duration, reason, callback.from_user, data.get('message_id', 0))
-        elif action == 'kick':
-            await execute_kick(callback.message.chat.id, target_id, target_name, reason, callback.from_user, data.get('message_id', 0))
-        await callback.message.edit_text("✅ Действие выполнено!")
-    else:
-        await callback.message.edit_text("❌ Действие отменено")
-    await state.clear()
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("lift_"))
-@edit_only()
-@check_public()
-async def lift_restriction(callback: CallbackQuery):
-    parts = callback.data.split('_')
-    action = parts[1]
-    target_id = int(parts[2])
-    original_message_id = int(parts[3]) if len(parts) > 3 else 0
-    moderator = callback.from_user
-    chat_id = callback.message.chat.id
-    try:
-        if action == 'mute':
-            await bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True))
-            mod_link = f"<a href='tg://user?id={moderator.id}'>{moderator.full_name}</a>"
-            await callback.message.edit_text(f"🔓 Ограничение снято\n\n👮 Модератор: {mod_link}", parse_mode="HTML")
-            if original_message_id:
-                await bot.send_message(chat_id, f"✅ Нарушения пользователя сняты модератором {mod_link}", reply_to_message_id=original_message_id, parse_mode="HTML")
-        elif action == 'ban':
-            await bot.unban_chat_member(chat_id, target_id)
-            unban_spammer_in_chat(target_id, chat_id)
-            mod_link = f"<a href='tg://user?id={moderator.id}'>{moderator.full_name}</a>"
-            user_link = f"<a href='tg://user?id={target_id}'>пользователь</a>"
-            await callback.message.edit_text(f"✅ Разбанен\n\n👤 Пользователь: {user_link}\n👮 Модератор: {mod_link}", parse_mode="HTML")
-        await callback.answer("✅ Ограничение снято!")
-    except Exception as e:
-        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
-
-@dp.callback_query(F.data.startswith("confirm_not_bot_"))
-@edit_only()
-@check_public()
-async def process_confirm_not_bot(callback: CallbackQuery):
-    parts = callback.data.split('_')
-    chat_id = int(parts[3])
-    user_id = int(parts[4])
-    msg_id = int(parts[5]) if len(parts) > 5 else 0
-    if callback.from_user.id != user_id:
-        await callback.answer("⚠️ Это не ваше подтверждение!", show_alert=True)
-        return
-    db.mark_user_confirmed(chat_id, user_id, not_bot=True, rules=False)
-    conf_type = db.get_confirmation_type(chat_id)
-    not_bot, rules = db.get_user_confirmation_status(chat_id, user_id)
-    if conf_type == 'both' and not rules:
-        await callback.message.edit_text("✅ Шаг 1 выполнен! Теперь выполните шаг 2.")
-        await callback.answer()
-        return
-    try:
-        await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(can_send_messages=True))
-    except:
-        pass
-    if msg_id > 0:
-        try:
-            await bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=f"✅ {callback.from_user.full_name} подтвердил, что не бот")
-        except:
-            pass
-    await send_simple_welcome(chat_id, callback.from_user)
-    await callback.message.edit_text("✅ Спасибо за подтверждение! Теперь вы можете писать в чат.")
-    await callback.answer()
-    await add_premium_reaction(callback.message, "✅")
-
-@dp.callback_query(F.data.startswith("agree_rules_"))
-@edit_only()
-@check_public()
-async def process_agree_rules(callback: CallbackQuery):
-    parts = callback.data.split('_')
-    chat_id = int(parts[2])
-    user_id = int(parts[3])
-    msg_id = int(parts[4]) if len(parts) > 4 else 0
-    if callback.from_user.id != user_id:
-        await callback.answer("⚠️ Это не ваше подтверждение!", show_alert=True)
-        return
-    db.mark_user_confirmed(chat_id, user_id, not_bot=False, rules=True)
-    conf_type = db.get_confirmation_type(chat_id)
-    not_bot, rules = db.get_user_confirmation_status(chat_id, user_id)
-    if conf_type == 'both' and not not_bot:
-        await callback.message.edit_text("✅ Шаг 2 выполнен! Теперь выполните шаг 1.")
-        await callback.answer()
-        return
-    try:
-        await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(can_send_messages=True))
-    except:
-        pass
-    if msg_id > 0:
-        try:
-            await bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=f"✅ {callback.from_user.full_name} согласился с правилами")
-        except:
-            pass
-    await send_simple_welcome(chat_id, callback.from_user)
-    await callback.message.edit_text("✅ Спасибо! Теперь вы можете писать в чат.")
-    await callback.answer()
-    await add_premium_reaction(callback.message, "✅")
-
-@dp.callback_query(F.data.startswith("go_to_pm_"))
-@edit_only()
-@check_public()
-async def go_to_pm(callback: CallbackQuery):
-    await callback.message.answer("💬 Откройте личные сообщения с ботом и завершите подтверждение.", reply_markup=get_pm_link_keyboard())
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("add_to_group_"))
-async def add_to_group(callback: CallbackQuery):
-    await callback.answer()
-    await callback.message.answer(f"➕ Добавьте бота в группу: https://t.me/{BOT_USERNAME}?startgroup=start")
 
 @dp.callback_query(F.data.startswith("links_"))
 @edit_only()
@@ -4897,13 +4490,13 @@ async def links_punishment_callbacks(callback: CallbackQuery, state: FSMContext)
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     action = callback.data.split('_')[1]
     if action in ['warn', 'kick']:
         s = db.get_links_filter_settings(chat_id)
         db.set_links_filter_settings(chat_id, s['enabled'], action, 0)
-        await callback.answer(f"✅ Наказание: {action}", show_alert=True)
+        await callback.answer(f"✅ Наказание: {action}")
         await links_manage(callback, state)
     elif action == 'mute':
         await state.update_data(links_action='mute')
@@ -4922,13 +4515,13 @@ async def profanity_punishment_callbacks(callback: CallbackQuery, state: FSMCont
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     action = callback.data.split('_')[1]
     if action in ['warn', 'kick']:
         s = db.get_profanity_filter_settings(chat_id)
         db.set_profanity_filter_settings(chat_id, s['enabled'], action, 0)
-        await callback.answer(f"✅ Наказание: {action}", show_alert=True)
+        await callback.answer(f"✅ Наказание: {action}")
         await profanity_manage(callback, state)
     elif action == 'mute':
         await state.update_data(profanity_action='mute')
@@ -4947,13 +4540,13 @@ async def raid_punishment_callbacks(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await callback.answer("❌ Сначала выберите группу!", show_alert=True)
+        await callback.answer("❌ Выберите группу!", show_alert=True)
         return
     action = callback.data.split('_')[1]
     if action in ['warn', 'kick']:
         s = db.get_raid_protection_settings(chat_id)
         db.set_raid_protection_settings(chat_id, s['enabled'], s['limit'], s['window'], action, s['duration'])
-        await callback.answer(f"✅ Наказание: {action}", show_alert=True)
+        await callback.answer(f"✅ Наказание: {action}")
         await raid_manage(callback, state)
     elif action == 'mute':
         await state.update_data(raid_action='mute')
@@ -4968,149 +4561,149 @@ async def raid_punishment_callbacks(callback: CallbackQuery, state: FSMContext):
 @dp.message(LinksStates.waiting_for_duration)
 async def process_links_duration(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     action = data.get('links_action')
     if not chat_id or not action:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        minutes = int(message.text)
-        if minutes < 0:
-            await message.answer("❌ Введите положительное число или 0!")
+        mins = int(message.text)
+        if mins < 0:
+            await message.answer("❌ Положительное число или 0!")
             return
-        duration = minutes * 60
+        dur = mins * 60
         s = db.get_links_filter_settings(chat_id)
-        db.set_links_filter_settings(chat_id, s['enabled'], action, duration)
-        await message.reply(f"✅ Наказание: {action} на {format_time(duration)}")
+        db.set_links_filter_settings(chat_id, s['enabled'], action, dur)
+        await message.reply(f"✅ Наказание: {action} на {format_time(dur)}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.message(ProfanityStates.waiting_for_duration)
 async def process_profanity_duration(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     action = data.get('profanity_action')
     if not chat_id or not action:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        minutes = int(message.text)
-        if minutes < 0:
-            await message.answer("❌ Введите положительное число или 0!")
+        mins = int(message.text)
+        if mins < 0:
+            await message.answer("❌ Положительное число или 0!")
             return
-        duration = minutes * 60
+        dur = mins * 60
         s = db.get_profanity_filter_settings(chat_id)
-        db.set_profanity_filter_settings(chat_id, s['enabled'], action, duration)
-        await message.reply(f"✅ Наказание: {action} на {format_time(duration)}")
+        db.set_profanity_filter_settings(chat_id, s['enabled'], action, dur)
+        await message.reply(f"✅ Наказание: {action} на {format_time(dur)}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.message(RaidStates.waiting_for_limit)
 async def process_raid_limit(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        limit = int(message.text)
-        if limit < 3 or limit > 50:
-            await message.answer("❌ Лимит должен быть от 3 до 50!")
+        val = int(message.text)
+        if val < 3 or val > 50:
+            await message.answer("❌ От 3 до 50!")
             return
         s = db.get_raid_protection_settings(chat_id)
-        db.set_raid_protection_settings(chat_id, s['enabled'], limit, s['window'], s['punishment'], s['duration'])
-        await message.reply(f"✅ Лимит вступлений установлен: {limit}")
+        db.set_raid_protection_settings(chat_id, s['enabled'], val, s['window'], s['punishment'], s['duration'])
+        await message.reply(f"✅ Лимит: {val}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.message(RaidStates.waiting_for_window)
 async def process_raid_window(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        window = int(message.text)
-        if window < 10 or window > 300:
-            await message.answer("❌ Период должен быть от 10 до 300 секунд!")
+        val = int(message.text)
+        if val < 10 or val > 300:
+            await message.answer("❌ От 10 до 300!")
             return
         s = db.get_raid_protection_settings(chat_id)
-        db.set_raid_protection_settings(chat_id, s['enabled'], s['limit'], window, s['punishment'], s['duration'])
-        await message.reply(f"✅ Период установлен: {window} сек")
+        db.set_raid_protection_settings(chat_id, s['enabled'], s['limit'], val, s['punishment'], s['duration'])
+        await message.reply(f"✅ Период: {val} сек")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.message(RaidStates.waiting_for_duration)
 async def process_raid_duration(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     action = data.get('raid_action')
     if not chat_id or not action:
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     try:
-        minutes = int(message.text)
-        if minutes < 0:
-            await message.answer("❌ Введите положительное число или 0!")
+        mins = int(message.text)
+        if mins < 0:
+            await message.answer("❌ Положительное число или 0!")
             return
-        duration = minutes * 60
+        dur = mins * 60
         s = db.get_raid_protection_settings(chat_id)
-        db.set_raid_protection_settings(chat_id, s['enabled'], s['limit'], s['window'], action, duration)
-        await message.reply(f"✅ Наказание: {action} на {format_time(duration)}")
+        db.set_raid_protection_settings(chat_id, s['enabled'], s['limit'], s['window'], action, dur)
+        await message.reply(f"✅ Наказание: {action} на {format_time(dur)}")
         await add_premium_reaction(message, "✅")
         await state.clear()
-    except ValueError:
+    except:
         await message.answer("❌ Введите число!")
 
 @dp.message(AutoCommentStates.waiting_for_text)
 async def process_auto_comment_text(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
     text = message.html_text.strip()
-    if len(text) > MAX_AUTO_COMMENT_LENGTH:
-        await message.answer(f"❌ Текст слишком длинный! Максимум {MAX_AUTO_COMMENT_LENGTH} символов")
+    if len(text) > 4000:
+        await message.answer("❌ Слишком длинный текст!")
         return
     s = db.get_auto_comment_settings(chat_id)
     db.set_auto_comment_settings(chat_id, s['enabled'], text, s['media_id'], s['media_type'])
@@ -5121,32 +4714,32 @@ async def process_auto_comment_text(message: Message, state: FSMContext):
 @dp.message(AutoCommentStates.waiting_for_media, F.photo | F.video | F.animation | F.sticker)
 async def process_auto_comment_media(message: Message, state: FSMContext):
     if message.chat.type != 'private':
-        await message.answer("❌ Настройки только в ЛС!")
+        await message.answer("❌ Только в ЛС!")
         await state.clear()
         return
     data = await state.get_data()
     chat_id = data.get('selected_chat_id')
     if not chat_id or not await is_creator(chat_id, message.from_user.id):
-        await message.answer("❌ Ошибка! Начните заново.")
+        await message.answer("❌ Ошибка!")
         await state.clear()
         return
-    media_id = None
-    media_type = None
+    media = None
+    mtype = None
     if message.photo:
-        media_id = message.photo[-1].file_id
-        media_type = 'photo'
+        media = message.photo[-1].file_id
+        mtype = 'photo'
     elif message.video:
-        media_id = message.video.file_id
-        media_type = 'video'
+        media = message.video.file_id
+        mtype = 'video'
     elif message.animation:
-        media_id = message.animation.file_id
-        media_type = 'animation'
+        media = message.animation.file_id
+        mtype = 'animation'
     elif message.sticker:
-        media_id = message.sticker.file_id
-        media_type = 'sticker'
+        media = message.sticker.file_id
+        mtype = 'sticker'
     caption = message.caption or ""
     s = db.get_auto_comment_settings(chat_id)
-    db.set_auto_comment_settings(chat_id, s['enabled'], caption, media_id, media_type)
+    db.set_auto_comment_settings(chat_id, s['enabled'], caption, media, mtype)
     await message.reply("✅ Медиа авто-комментария сохранено!")
     await add_premium_reaction(message, "✅")
     await state.clear()
@@ -5154,6 +4747,109 @@ async def process_auto_comment_media(message: Message, state: FSMContext):
 @dp.message(AutoCommentStates.waiting_for_media)
 async def process_auto_comment_media_invalid(message: Message, state: FSMContext):
     await message.answer("❌ Отправьте фото, видео, GIF или стикер!")
+
+@dp.callback_query(F.data.startswith("confirm_"))
+@edit_only()
+@check_owner()
+async def process_confirm_action(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    action = data.get('action')
+    target_id = data.get('target_id')
+    target_name = data.get('target_name')
+    duration = data.get('duration')
+    reason = data.get('reason')
+    if callback.data.endswith('_yes'):
+        if action == 'mute':
+            await execute_mute(callback.message.chat.id, target_id, target_name, duration, reason, callback.from_user)
+        elif action == 'ban':
+            await execute_ban(callback.message.chat.id, target_id, target_name, duration, reason, callback.from_user)
+        elif action == 'kick':
+            await execute_kick(callback.message.chat.id, target_id, target_name, reason, callback.from_user)
+        await callback.message.edit_text("✅ Действие выполнено!")
+    else:
+        await callback.message.edit_text("❌ Отменено")
+    await state.clear()
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("lift_"))
+@edit_only()
+@check_public()
+async def lift_restriction(callback: CallbackQuery):
+    parts = callback.data.split('_')
+    action = parts[1]
+    target_id = int(parts[2])
+    chat_id = callback.message.chat.id
+    try:
+        if action == 'mute':
+            await bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True))
+            await callback.message.edit_text(customization.format_message('lift_restriction_message', moderator=callback.from_user.full_name), parse_mode="HTML")
+            await callback.message.answer(customization.format_message('lift_notification', moderator=callback.from_user.full_name), reply_to_message_id=int(parts[3]), parse_mode="HTML")
+        elif action == 'ban':
+            await bot.unban_chat_member(chat_id, target_id)
+            await callback.message.edit_text(f"✅ Разбанен\n👮 {callback.from_user.full_name}")
+        await callback.answer("✅ Ограничение снято!")
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+@dp.callback_query(F.data.startswith("confirm_not_bot_"))
+@edit_only()
+@check_public()
+async def process_confirm_not_bot(callback: CallbackQuery):
+    parts = callback.data.split('_')
+    chat_id, user_id = int(parts[3]), int(parts[4])
+    if callback.from_user.id != user_id:
+        await callback.answer("⚠️ Не ваше подтверждение!", show_alert=True)
+        return
+    db.mark_user_confirmed(chat_id, user_id, not_bot=True, rules=False)
+    ct = db.get_confirmation_type(chat_id)
+    _, rules = db.get_user_confirmation_status(chat_id, user_id)
+    if ct == 'both' and not rules:
+        await callback.message.edit_text("✅ Шаг 1 выполнен! Шаг 2 - прочитайте правила.")
+        await callback.answer()
+        return
+    try:
+        await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(can_send_messages=True))
+    except:
+        pass
+    await send_simple_welcome(chat_id, callback.from_user)
+    await callback.message.edit_text("✅ Подтверждено!")
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("agree_rules_"))
+@edit_only()
+@check_public()
+async def process_agree_rules(callback: CallbackQuery):
+    parts = callback.data.split('_')
+    chat_id, user_id = int(parts[2]), int(parts[3])
+    if callback.from_user.id != user_id:
+        await callback.answer("⚠️ Не ваше подтверждение!", show_alert=True)
+        return
+    db.mark_user_confirmed(chat_id, user_id, not_bot=False, rules=True)
+    ct = db.get_confirmation_type(chat_id)
+    not_bot, _ = db.get_user_confirmation_status(chat_id, user_id)
+    if ct == 'both' and not not_bot:
+        await callback.message.edit_text("✅ Шаг 2 выполнен! Шаг 1 - подтвердите, что вы не бот.")
+        await callback.answer()
+        return
+    try:
+        await bot.restrict_chat_member(chat_id, user_id, permissions=ChatPermissions(can_send_messages=True))
+    except:
+        pass
+    await send_simple_welcome(chat_id, callback.from_user)
+    await callback.message.edit_text("✅ Правила приняты!")
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("go_to_pm_"))
+@edit_only()
+@check_public()
+async def go_to_pm(callback: CallbackQuery):
+    await callback.message.answer("💬 Откройте ЛС с ботом", reply_markup=get_pm_link_keyboard())
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("add_to_group_"))
+async def add_to_group(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.answer(f"➕ Добавьте бота в группу: https://t.me/{BOT_USERNAME}?startgroup=start")
 
 async def main():
     dp.message.middleware(CommandFloodMiddleware())
@@ -5167,5 +4863,5 @@ async def main():
     asyncio.create_task(clean_old_logs())
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
+if __name__== "__main__":
     asyncio.run(main())
